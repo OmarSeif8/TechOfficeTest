@@ -1,0 +1,909 @@
+     1→// =============================================================================
+     2→// TechOffice — Prisma Schema (Phase 1 web build, WO-W-1)
+     3→// =============================================================================
+     4→// Source of truth: docs/planning/ERD_V1.1_WEB.md
+     5→// Governing law:   docs/planning/CONSTITUTION_V1.1_WEB.md
+     6→//
+     7→// Global conventions (Constitution v1.1 §5, ERD v1.1 §2):
+     8→//   * Primary keys:        `String @id @default(cuid())` (cuid is time-ordered)
+     9→//   * Audit columns:       `createdAt DateTime @default(now())` + `updatedAt DateTime @updatedAt`
+    10→//   * Soft delete:         `deletedAt DateTime?` on all updatable aggregates
+    11→//   * Optimistic currency: `version Int @default(1)` on BoQDocument, BoQSection,
+    12→//                          BoQItem, Project, RateAnalysis, CalculationRecord,
+    13→//                          ItemLibrary, CompanyProfile, UserSettings, Subscription
+    14→//   * Money & quantities:  `String` storing decimal strings — application layer
+    15→//                          uses decimal.js; SQLite has no native decimal type
+    16→//   * Bilingual content:   `<field>En String` + `<field>Ar String?` (never concatenated)
+    17→//   * Audit logging:       every mutation writes a row to AuditLog (append-only)
+    18→//
+    19→// Phase 1 (BoQ module) tables are complete and enforced.
+    20→// Phase 2-4 tables are declared in §8 below as RESERVED additive (declared,
+    21→// not enforced in Phase 1) so the schema never needs to be rewritten.
+    22→// =============================================================================
+    23→
+    24→generator client {
+    25→  provider = "prisma-client-js"
+    26→}
+    27→
+    28→datasource db {
+    29→  provider = "sqlite"
+    30→  url      = env("DATABASE_URL")
+    31→}
+    32→
+    33→// =============================================================================
+    34→// ENUMS
+    35→//   Prisma stores enums as TEXT in SQLite; the application layer (zod) is the
+    36→//   authoritative validator per ERD v1.1 §2.
+    37→// =============================================================================
+    38→
+    39→enum UserRole {
+    40→  USER
+    41→  ADMIN
+    42→}
+    43→
+    44→enum Locale {
+    45→  EN
+    46→  AR
+    47→}
+    48→
+    49→enum Theme {
+    50→  LIGHT
+    51→  DARK
+    52→  SYSTEM
+    53→}
+    54→
+    55→enum LaborMode {
+    56→  CONSUMPTION
+    57→  CREW
+    58→}
+    59→
+    60→enum SubscriptionStatus {
+    61→  TRIAL
+    62→  ACTIVE
+    63→  PAST_DUE
+    64→  CANCELED
+    65→}
+    66→
+    67→enum SubscriptionPlan {
+    68→  FREE
+    69→  PRO
+    70→  ENTERPRISE
+    71→}
+    72→
+    73→enum BoQDocumentStatus {
+    74→  DRAFT
+    75→  FINALIZED
+    76→  ARCHIVED
+    77→}
+    78→
+    79→enum BoQItemType {
+    80→  RATE_BASED
+    81→  LUMP_SUM
+    82→  PROVISIONAL_SUM
+    83→  DAYWORK
+    84→  UNIT_ONLY
+    85→}
+    86→
+    87→enum RateAnalysisLineType {
+    88→  MATERIAL
+    89→  LABOR
+    90→  EQUIPMENT
+    91→  SUBCONTRACT
+    92→}
+    93→
+    94→enum CalculatorType {
+    95→  CONCRETE
+    96→  FORMWORK
+    97→  REBAR
+    98→  MASONRY
+    99→  PLASTER
+   100→  PAINT
+   101→}
+   102→
+   103→enum ImportBatchStatus {
+   104→  PENDING
+   105→  VALIDATED
+   106→  COMMITTED
+   107→  FAILED
+   108→}
+   109→
+   110→enum ItemLibraryScope {
+   111→  APP_GLOBAL
+   112→  USER_PRIVATE
+   113→}
+   114→
+   115→// =============================================================================
+   116→// SECTION 1 — AUTH & USER (Phase 1 web)
+   117→//   NextAuth (Auth.js v4) schema + TechOffice extensions.
+   118→// =============================================================================
+   119→
+   120→model User {
+   121→  id            String    @id @default(cuid())
+   122→  email         String    @unique
+   123→  emailVerified DateTime? // NextAuth email-verify flow
+   124→  passwordHash  String?   // null if OAuth-only
+   125→  name          String?
+   126→  image         String?   // NextAuth profile image URL
+   127→  role          UserRole  @default(USER)
+   128→  locale        Locale    @default(EN)
+   129→  createdAt     DateTime  @default(now())
+   130→  updatedAt     DateTime  @updatedAt
+   131→  deletedAt     DateTime?
+   132→
+   133→  sessions           Session[]
+   134→  accounts           Account[]
+   135→  userSettings       UserSettings?
+   136→  companyProfile     CompanyProfile?
+   137→  subscription       Subscription?
+   138→  projects           Project[] // owned projects (Project.ownerId)
+   139→  fileUploads        FileUpload[]
+   140→  auditLogs          AuditLog[]
+   141→  libraryItems       ItemLibrary[] // privately-saved library items
+   142→  createdSnapshots   ProjectSnapshot[]
+   143→
+   144→  @@index([email])
+   145→  @@index([deletedAt])
+   146→}
+   147→
+   148→model Session {
+   149→  id           String   @id @default(cuid())
+   150→  sessionToken String   @unique
+   151→  userId       String
+   152→  expires      DateTime
+   153→  createdAt    DateTime @default(now())
+   154→  updatedAt    DateTime  @updatedAt
+   155→
+   156→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   157→
+   158→  @@index([userId])
+   159→}
+   160→
+   161→model VerificationToken {
+   162→  identifier String
+   163→  token      String   @unique
+   164→  expires    DateTime
+   165→
+   166→  @@unique([identifier, token])
+   167→}
+   168→
+   169→// NextAuth OAuth account — declared now so future OAuth providers require no
+   170→// schema migration. Nullability mirrors the NextAuth Prisma adapter contract.
+   171→model Account {
+   172→  id                String  @id @default(cuid())
+   173→  userId            String
+   174→  type              String // "oauth" | "oidc" | "email"
+   175→  provider          String
+   176→  providerAccountId String
+   177→  refresh_token     String?
+   178→  access_token      String?
+   179→  expires_at        Int?
+   180→  token_type        String?
+   181→  scope             String?
+   182→  id_token          String?
+   183→  session_state     String?
+   184→  createdAt         DateTime @default(now())
+   185→  updatedAt         DateTime @updatedAt
+   186→
+   187→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   188→
+   189→  @@index([userId])
+   190→  @@unique([provider, providerAccountId])
+   191→}
+   192→
+   193→// =============================================================================
+   194→// SECTION 2 — USER-LEVEL ENTITIES (Phase 1 web)
+   195→//   One-row-per-user settings & company profile; subscription for Phase 5 tier.
+   196→// =============================================================================
+   197→
+   198→model UserSettings {
+   199→  id                 String    @id @default(cuid())
+   200→  userId             String    @unique
+   201→  theme              Theme     @default(DARK)
+   202→  locale             Locale    @default(EN)
+   203→  defaultLaborMode   LaborMode @default(CONSUMPTION)
+   204→  defaultOverheadPct String    @default("10") // decimal string — decimal.js on app side
+   205→  defaultProfitPct   String    @default("15") // decimal string — decimal.js on app side
+   206→  autosaveIntervalMs Int       @default(2000)
+   207→  version            Int       @default(1) // optimistic concurrency
+   208→  createdAt          DateTime  @default(now())
+   209→  updatedAt          DateTime  @updatedAt
+   210→
+   211→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   212→}
+   213→
+   214→model CompanyProfile {
+   215→  id                String      @id @default(cuid())
+   216→  userId            String      @unique
+   217→  nameEn            String
+   218→  nameAr            String?
+   219→  addressEn         String?
+   220→  addressAr         String?
+   221→  phone             String?
+   222→  email             String?
+   223→  taxId             String?
+   224→  logoFileUploadId  String?
+   225→  version           Int         @default(1) // optimistic concurrency
+   226→  createdAt         DateTime    @default(now())
+   227→  updatedAt         DateTime    @updatedAt
+   228→
+   229→  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+   230→  logoFile FileUpload? @relation("CompanyProfileLogo", fields: [logoFileUploadId], references: [id], onDelete: SetNull)
+   231→
+   232→  @@index([logoFileUploadId])
+   233→}
+   234→
+   235→model Subscription {
+   236→  id                 String              @id @default(cuid())
+   237→  userId             String              @unique
+   238→  status             SubscriptionStatus  @default(TRIAL)
+   239→  plan               SubscriptionPlan    @default(FREE)
+   240→  stripeCustomerId   String?             // Phase 5: merchant of record
+   241→  currentPeriodStart DateTime?
+   242→  currentPeriodEnd   DateTime?
+   243→  canceledAt         DateTime?
+   244→  version            Int                 @default(1) // optimistic concurrency
+   245→  createdAt          DateTime            @default(now())
+   246→  updatedAt          DateTime            @updatedAt
+   247→
+   248→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   249→}
+   250→
+   251→// =============================================================================
+   252→// SECTION 3 — FILE STORAGE & AUDIT LOG
+   253→// =============================================================================
+   254→
+   255→// FileUpload: metadata only — the actual blob lives on disk (dev) or in
+   256→// S3-compatible storage (prod). SHA-256 dedupes + verifies integrity.
+   257→model FileUpload {
+   258→  id            String   @id @default(cuid())
+   259→  uploaderUserId String
+   260→  filename      String   // storage-side filename (e.g. "{sha256}.bin")
+   261→  originalName  String   // user-facing name as uploaded
+   262→  mimeType      String   // validated against allowlist (BR-WEB-3)
+   263→  sizeBytes     Int      // checked against per-type limit (BR-WEB-3)
+   264→  storagePath   String   // path/key in blob storage
+   265→  sha256        String
+   266→  createdAt     DateTime @default(now())
+   267→  deletedAt     DateTime?
+   268→
+   269→  user             User              @relation(fields: [uploaderUserId], references: [id], onDelete: Cascade)
+   270→  companyLogos     CompanyProfile[]  @relation("CompanyProfileLogo")
+   271→  importBatches    ImportBatch[]     // reverse relation — ImportBatch.fileUploadId
+   272→
+   273→  @@index([uploaderUserId, createdAt])
+   274→  @@index([sha256])
+   275→}
+   276→
+   277→// AuditLog: append-only, no updates, no deletes (enforced by application layer).
+   278→// Every mutation in the system writes a row here per BR-WEB-6.
+   279→model AuditLog {
+   280→  id          String   @id @default(cuid())
+   281→  actorUserId String?  // null for system actions
+   282→  action      String   // "create" | "update" | "delete" | "restore" | "import" | "export"
+   283→  entityType  String   // "Project" | "BoQDocument" | "BoQItem" | ...
+   284→  entityId    String
+   285→  beforeJson  String?  // JSON snapshot of row before mutation
+   286→  afterJson   String?  // JSON snapshot of row after mutation
+   287→  ipAddress   String?
+   288→  userAgent   String?
+   289→  createdAt   DateTime @default(now())
+   290→
+   291→  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+   292→
+   293→  @@index([actorUserId, createdAt])
+   294→  @@index([entityType, entityId])
+   295→  @@index([createdAt])
+   296→}
+   297→
+   298→// =============================================================================
+   299→// SECTION 4 — MASTER REFERENCE DATA (app-level, shared by all users)
+   300→//   At project creation, these are copied into project-scoped snapshot tables
+   301→//   (ProjectUnit, ProjectRebarDiameter, ProjectShapeCode) so projects are
+   302→//   immune to later edits of the master. Cross-table FKs to the master from
+   303→//   project-scoped tables are forbidden; project rows reference snapshots only.
+   304→// =============================================================================
+   305→
+   306→model Unit {
+   307→  id               String   @id @default(cuid())
+   308→  code             String   @unique // "m" | "m2" | "m3" | "ton" | "kg" | "no" | "lot" | "hr" | "sum"
+   309→  nameEn           String
+   310→  nameAr           String?
+   311→  defaultPrecision Int      @default(2) // decimal places per BR-6
+   312→  createdAt        DateTime @default(now())
+   313→  updatedAt        DateTime @updatedAt
+   314→
+   315→  aliases           UnitAlias[]
+   316→  projectSnapshots  ProjectUnit[]
+   317→  libraryItems      ItemLibrary[]
+   318→
+   319→  @@index([code])
+   320→}
+   321→
+   322→model UnitAlias {
+   323→  id        String   @id @default(cuid())
+   324→  unitId    String
+   325→  alias     String   @unique // case-insensitive match in app layer (e.g. "m²" → "m2")
+   326→  createdAt DateTime @default(now())
+   327→
+   328→  unit Unit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+   329→
+   330→  @@index([unitId])
+   331→  @@index([alias])
+   332→}
+   333→
+   334→model RebarDiameter {
+   335→  id            String   @id @default(cuid())
+   336→  diameterMm    Int      @unique // 6, 8, 10, ..., 40 — BR-11
+   337→  weightKgPerM  String   // kg/m as decimal string (12mm → 0.888, per BR-11)
+   338→  createdAt     DateTime @default(now())
+   339→  updatedAt     DateTime @updatedAt
+   340→
+   341→  projectSnapshots ProjectRebarDiameter[]
+   342→
+   343→  @@index([diameterMm])
+   344→}
+   345→
+   346→model ShapeCode {
+   347→  id              String   @id @default(cuid())
+   348→  code            String   @unique // "00" | "01" | "11" | "21" | ... (BS 8666 subset)
+   349→  nameEn          String
+   350→  nameAr          String?
+   351→  illustrationRef String?  // Phase 1: text-only — future: SVG/PNG reference
+   352→  createdAt       DateTime @default(now())
+   353→  updatedAt       DateTime @updatedAt
+   354→
+   355→  projectSnapshots ProjectShapeCode[]
+   356→
+   357→  @@index([code])
+   358→}
+   359→
+   360→// =============================================================================
+   361→// SECTION 5 — PROJECT-SCOPED TABLES
+   362→// =============================================================================
+   363→
+   364→model Project {
+   365→  id          String   @id @default(cuid())
+   366→  ownerId     String   // → User.id
+   367→  nameEn      String
+   368→  nameAr      String?
+   369→  clientEn    String?
+   370→  clientAr    String?
+   371→  locationEn  String?
+   372→  locationAr  String?
+   373→  contractNo  String?
+   374→  currency    String   @default("USD") // ISO 4217
+   375→  version     Int      @default(1) // optimistic concurrency
+   376→  createdAt   DateTime @default(now())
+   377→  updatedAt   DateTime @updatedAt
+   378→  deletedAt   DateTime?
+   379→
+   380→  owner                User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+   381→  boqDocuments         BoQDocument[]
+   382→  snapshots            ProjectSnapshot[]
+   383→  projectUnits         ProjectUnit[]
+   384→  projectRebarDiameters ProjectRebarDiameter[]
+   385→  projectShapeCodes    ProjectShapeCode[]
+   386→  importBatches        ImportBatch[]
+   387→  rateAnalyses         RateAnalysis[]
+   388→  calculationRecords   CalculationRecord[]
+   389→  boqSections          BoQSection[] // denormalised project FK for fast queries
+   390→  boqItems             BoQItem[]    // denormalised project FK for fast queries
+   391→
+   392→  @@index([ownerId, deletedAt])
+   393→  @@index([updatedAt])
+   394→}
+   395→
+   396→// Frozen snapshot of Unit at project creation — project rows always reference
+   397→// this snapshot, never the master Unit, so projects are portable across users.
+   398→model ProjectUnit {
+   399→  id               String   @id @default(cuid())
+   400→  projectId        String
+   401→  unitId           String   // provenance — master Unit this was copied from
+   402→  code             String
+   403→  nameEn           String
+   404→  nameAr           String?
+   405→  defaultPrecision Int
+   406→  createdAt        DateTime @default(now())
+   407→
+   408→  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   409→  sourceUnit    Unit          @relation(fields: [unitId], references: [id], onDelete: Restrict)
+   410→  boqItems      BoQItem[]
+   411→  rateAnalysisLines RateAnalysisLine[]
+   412→  calculationRecords CalculationRecord[]
+   413→
+   414→  @@unique([projectId, code])
+   415→  @@index([projectId])
+   416→  @@index([unitId])
+   417→}
+   418→
+   419→model ProjectRebarDiameter {
+   420→  id           String   @id @default(cuid())
+   421→  projectId    String
+   422→  rebarDiameterId String // provenance — master RebarDiameter this was copied from
+   423→  diameterMm   Int
+   424→  weightKgPerM String   // kg/m as decimal string
+   425→  createdAt    DateTime @default(now())
+   426→
+   427→  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   428→  sourceDiameter  RebarDiameter    @relation(fields: [rebarDiameterId], references: [id], onDelete: Restrict)
+   429→
+   430→  @@unique([projectId, diameterMm])
+   431→  @@index([projectId])
+   432→  @@index([rebarDiameterId])
+   433→}
+   434→
+   435→model ProjectShapeCode {
+   436→  id              String   @id @default(cuid())
+   437→  projectId       String
+   438→  shapeCodeId     String   // provenance — master ShapeCode this was copied from
+   439→  code            String
+   440→  nameEn          String
+   441→  nameAr          String?
+   442→  illustrationRef String?
+   443→  createdAt       DateTime @default(now())
+   444→
+   445→  project       Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   446→  sourceShape   ShapeCode  @relation(fields: [shapeCodeId], references: [id], onDelete: Restrict)
+   447→
+   448→  @@unique([projectId, code])
+   449→  @@index([projectId])
+   450→  @@index([shapeCodeId])
+   451→}
+   452→
+   453→// ProjectSnapshot: immutable serialized state of an entire project, created on
+   454→// interval / before imports / before destructive ops. Restore = copy payload
+   455→// back into project rows in a transaction.
+   456→model ProjectSnapshot {
+   457→  id              String   @id @default(cuid())
+   458→  projectId       String
+   459→  name            String
+   460→  description     String?
+   461→  dataJson        String   // JSON of all project rows at snapshot time
+   462→  createdByUserId String?  // → User.id; nullable so snapshots survive user deletion (SetNull)
+   463→  createdAt       DateTime @default(now())
+   464→
+   465→  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   466→  createdBy User?  @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+   467→
+   468→  @@index([projectId, createdAt])
+   469→  @@index([createdByUserId])
+   470→}
+   471→
+   472→// =============================================================================
+   473→// SECTION 6 — BoQ MODULE (Phase 1 core)
+   474→//   BoQDocument → BoQSection → BoQItem, with optional RateAnalysis (1:1) and
+   475→//   CalculationRecord (1:1, orphan-safe). ImportBatch tracks Excel imports.
+   476→// =============================================================================
+   477→
+   478→model BoQDocument {
+   479→  id         String             @id @default(cuid())
+   480→  projectId  String
+   481→  nameEn     String
+   482→  nameAr     String?
+   483→  status     BoQDocumentStatus  @default(DRAFT) // DRAFT | FINALIZED | ARCHIVED
+   484→  version    Int                @default(1) // optimistic concurrency
+   485→  createdAt  DateTime           @default(now())
+   486→  updatedAt  DateTime           @updatedAt
+   487→  deletedAt  DateTime?
+   488→
+   489→  project  Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   490→  sections BoQSection[]
+   491→  items    BoQItem[] // denormalised documentId for fast document-level queries
+   492→  imports  ImportBatch[]
+   493→
+   494→  @@index([projectId, deletedAt])
+   495→  @@index([status])
+   496→}
+   497→
+   498→model BoQSection {
+   499→  id         String   @id @default(cuid())
+   500→  documentId String
+   501→  projectId  String   // denormalised for fast project-level queries
+   502→  code       String
+   503→  titleEn    String
+   504→  titleAr    String?
+   505→  sortOrder  Int      @default(0)
+   506→  version    Int      @default(1) // optimistic concurrency
+   507→  createdAt  DateTime @default(now())
+   508→  updatedAt  DateTime @updatedAt
+   509→  deletedAt  DateTime?
+   510→
+   511→  document BoQDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+   512→  project  Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   513→  items    BoQItem[]
+   514→
+   515→  @@index([documentId, deletedAt])
+   516→  @@index([projectId, deletedAt])
+   517→  @@index([sortOrder])
+   518→}
+   519→
+   520→model BoQItem {
+   521→  id                  String       @id @default(cuid())
+   522→  sectionId           String
+   523→  documentId          String       // denormalised for fast document-level queries
+   524→  projectId           String       // denormalised for fast project-level queries
+   525→  code                String?      // BR-7 numbering
+   526→  descriptionEn       String
+   527→  descriptionAr       String?
+   528→  unitId              String?      // → ProjectUnit.id; null for LUMP_SUM/PROVISIONAL_SUM
+   529→  quantity            String       @default("0") // decimal string — decimal.js on app side
+   530→  rate                String       @default("0") // decimal string — decimal.js on app side
+   531→  amount              String       @default("0") // decimal string — computed = qty × rate (app-enforced)
+   532→  itemType            BoQItemType  @default(RATE_BASED)
+   533→  libraryItemId       String?     // provenance — ItemLibrary.id this was imported from
+   534→  sortOrder           Int          @default(0)
+   535→  version             Int          @default(1) // optimistic concurrency
+   536→  createdAt           DateTime     @default(now())
+   537→  updatedAt           DateTime     @updatedAt
+   538→  deletedAt           DateTime?
+   539→
+   540→  section            BoQSection         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+   541→  document           BoQDocument        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+   542→  project            Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   543→  unit               ProjectUnit?       @relation(fields: [unitId], references: [id], onDelete: SetNull)
+   544→  libraryItem        ItemLibrary?       @relation(fields: [libraryItemId], references: [id], onDelete: SetNull)
+   545→  rateAnalysis       RateAnalysis?
+   546→  calculationRecord  CalculationRecord?
+   547→
+   548→  @@index([sectionId, deletedAt])
+   549→  @@index([documentId, deletedAt])
+   550→  @@index([projectId, deletedAt])
+   551→  @@index([libraryItemId])
+   552→  @@index([sortOrder])
+   553→}
+   554→
+   555→// RateAnalysis: 1:1 with BoQItem (FK on this side, @unique). Computed totalRate
+   556→// is the input rate for the linked BoQItem per BR-8..BR-10.
+   557→model RateAnalysis {
+   558→  id           String    @id @default(cuid())
+   559→  boqItemId    String    @unique // 1:1 with BoQItem per spec S5
+   560→  projectId    String
+   561→  totalRate    String    // decimal string — computed from lines × (1+overhead) × (1+profit)
+   562→  overheadPct  String    // decimal string — overhead % applied
+   563→  profitPct    String    // decimal string — profit % applied
+   564→  laborMode    LaborMode @default(CONSUMPTION)
+   565→  version      Int       @default(1) // optimistic concurrency
+   566→  createdAt    DateTime  @default(now())
+   567→  updatedAt    DateTime  @updatedAt
+   568→
+   569→  boqItem BoQItem           @relation(fields: [boqItemId], references: [id], onDelete: Cascade)
+   570→  project Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   571→  lines   RateAnalysisLine[]
+   572→
+   573→  @@index([projectId])
+   574→  @@index([boqItemId])
+   575→}
+   576→
+   577→model RateAnalysisLine {
+   578→  id            String                @id @default(cuid())
+   579→  rateAnalysisId String
+   580→  lineType      RateAnalysisLineType  // MATERIAL | LABOR | EQUIPMENT | SUBCONTRACT
+   581→  descriptionEn String
+   582→  descriptionAr String?
+   583→  quantity      String                // decimal string — consumption qty
+   584→  unitId        String?               // → ProjectUnit.id; nullable for crew-mode labor
+   585→  unitPrice     String                // decimal string — unit cost
+   586→  wastePct      String                @default("0") // decimal string — materials only (BR-8)
+   587→  total         String                // decimal string — computed = qty × unitPrice × (1+waste)
+   588→  sortOrder     Int                   @default(0)
+   589→  createdAt     DateTime             @default(now())
+   590→  updatedAt     DateTime             @updatedAt
+   591→
+   592→  rateAnalysis RateAnalysis @relation(fields: [rateAnalysisId], references: [id], onDelete: Cascade)
+   593→  unit         ProjectUnit?  @relation(fields: [unitId], references: [id], onDelete: SetNull)
+   594→
+   595→  @@index([rateAnalysisId, sortOrder])
+   596→  @@index([unitId])
+   597→}
+   598→
+   599→// CalculationRecord: 1:1 with BoQItem (FK on this side, @unique, orphan-safe
+   600→// per F5 — can exist unlinked). Stores inputs/result of a calculator (concrete,
+   601→// formwork, rebar, masonry, plaster, paint) for audit trail.
+   602→model CalculationRecord {
+   603→  id              String         @id @default(cuid())
+   604→  projectId       String
+   605→  calculatorType  CalculatorType // CONCRETE | FORMWORK | REBAR | MASONRY | PLASTER | PAINT
+   606→  inputsJson     String         // JSON: zod schema per calculator type
+   607→  resultJson     String         // JSON: row-by-row breakdown
+   608→  resultQuantity String         // decimal string — final computed quantity
+   609→  resultUnitId   String?        // → ProjectUnit.id
+   610→  linkedBoqItemId String?  @unique // → BoQItem.id; null = orphan (calculation not yet applied)
+   611→  linkedAt       DateTime?       // when linked to a BoQItem (BR-13: applying never silently overwrites)
+   612→  version        Int             @default(1) // optimistic concurrency
+   613→  createdAt      DateTime        @default(now())
+   614→  updatedAt      DateTime        @updatedAt
+   615→
+   616→  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   617→  resultUnit     ProjectUnit?  @relation(fields: [resultUnitId], references: [id], onDelete: SetNull)
+   618→  linkedBoqItem  BoQItem?      @relation(fields: [linkedBoqItemId], references: [id], onDelete: SetNull)
+   619→
+   620→  @@index([projectId, createdAt])
+   621→  @@index([calculatorType])
+   622→  @@index([linkedBoqItemId])
+   623→  @@index([resultUnitId])
+   624→}
+   625→
+   626→// ImportBatch: tracks Excel imports. Status machine: PENDING → VALIDATED →
+   627→// COMMITTED (or → FAILED). Validation/mapping JSON stored for re-runs.
+   628→model ImportBatch {
+   629→  id             String             @id @default(cuid())
+   630→  projectId      String
+   631→  documentId     String?
+   632→  fileName       String
+   633→  fileUploadId   String?
+   634→  totalRows      Int                @default(0)
+   635→  importedRows   Int                @default(0)
+   636→  skippedRows    Int                @default(0)
+   637→  status         ImportBatchStatus  @default(PENDING)
+   638→  mappingJson    String?            // JSON: column mapping
+   639→  validationJson String?            // JSON: validation errors per row
+   640→  createdAt      DateTime           @default(now())
+   641→  committedAt    DateTime?
+   642→
+   643→  project  Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   644→  document BoQDocument?  @relation(fields: [documentId], references: [id], onDelete: SetNull)
+   645→  file     FileUpload?   @relation(fields: [fileUploadId], references: [id], onDelete: SetNull)
+   646→
+   647→  @@index([projectId, createdAt])
+   648→  @@index([documentId])
+   649→  @@index([fileUploadId])
+   650→  @@index([status])
+   651→}
+   652→
+   653→// =============================================================================
+   654→// SECTION 7 — ITEM LIBRARY (F6, app-level, app-global + user-private)
+   655→//   Library items are templates — when imported into a project they become
+   656→//   independent BoQItem rows (libraryItem FK tracks provenance only).
+   657→// =============================================================================
+   658→
+   659→model LibraryCategory {
+   660→  id        String   @id @default(cuid())
+   661→  parentId  String?  // self-tree — null = root
+   662→  nameEn    String
+   663→  nameAr    String?
+   664→  sortOrder Int      @default(0)
+   665→  createdAt DateTime @default(now())
+   666→  updatedAt DateTime @updatedAt
+   667→
+   668→  parent   LibraryCategory?  @relation("LibraryCategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+   669→  children LibraryCategory[] @relation("LibraryCategoryTree")
+   670→  items    ItemLibrary[]
+   671→
+   672→  @@index([parentId])
+   673→  @@index([sortOrder])
+   674→}
+   675→
+   676→model ItemLibrary {
+   677→  id             String           @id @default(cuid())
+   678→  categoryId     String?
+   679→  code           String?          // optional catalog code
+   680→  descriptionEn  String
+   681→  descriptionAr  String?
+   682→  unitId         String?          // → Unit.id (master reference; library is app-level)
+   683→  defaultSpecsEn String?
+   684→  defaultSpecsAr String?
+   685→  scope          ItemLibraryScope @default(APP_GLOBAL) // APP_GLOBAL | USER_PRIVATE
+   686→  ownerId        String?          // → User.id; null if APP_GLOBAL
+   687→  version        Int              @default(1) // optimistic concurrency
+   688→  createdAt      DateTime         @default(now())
+   689→  updatedAt      DateTime         @updatedAt
+   690→  deletedAt      DateTime?
+   691→
+   692→  category LibraryCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+   693→  unit     Unit?            @relation(fields: [unitId], references: [id], onDelete: Restrict)
+   694→  owner    User?            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+   695→  boqItems BoQItem[]
+   696→
+   697→  @@index([categoryId])
+   698→  @@index([unitId])
+   699→  @@index([ownerId, deletedAt])
+   700→  @@index([scope, deletedAt])
+   701→  @@index([code])
+   702→}
+   703→
+   704→// =============================================================================
+   705→// SECTION 8 — RESERVED — Phase 2/3/4 (declared, not enforced in Phase 1)
+   706→//   These tables are declared now so the schema never needs to be rewritten
+   707→//   when Phase 2 (Planning), Phase 3 (Documents) or Phase 4 (Payments) land.
+   708→//   Phase 1 build does NOT create rows in these tables and does NOT enforce
+   709→//   their relations. Field shapes here are minimal — finalised in their phase
+   710→//   spec (SPEC_PHASE2A_CPM.md, etc.).
+   711→// =============================================================================
+   712→
+   713→// -----------------------------------------------------------------------------
+   714→// Phase 2 — Planning (CPM engine per SPEC_PHASE2A_CPM.md)
+   715→// -----------------------------------------------------------------------------
+   716→
+   717→// WbsNode: work breakdown structure tree for a project.
+   718→model WbsNode {
+   719→  id        String   @id @default(cuid())
+   720→  projectId String
+   721→  parentId  String?
+   722→  code      String
+   723→  nameEn    String
+   724→  nameAr    String?
+   725→  sortOrder Int      @default(0)
+   726→  createdAt DateTime @default(now())
+   727→  updatedAt DateTime @updatedAt
+   728→
+   729→  @@index([projectId])
+   730→  @@index([parentId])
+   731→}
+   732→
+   733→// Activity: a single schedulable task in the CPM engine.
+   734→model Activity {
+   735→  id        String   @id @default(cuid())
+   736→  projectId String
+   737→  code      String
+   738→  nameEn    String
+   739→  nameAr    String?
+   740→  createdAt DateTime @default(now())
+   741→  updatedAt DateTime @updatedAt
+   742→
+   743→  @@index([projectId])
+   744→}
+   745→
+   746→// ScheduleRun: a snapshot run of the CPM engine (baseline or update).
+   747→model ScheduleRun {
+   748→  id         String   @id @default(cuid())
+   749→  projectId  String
+   750→  dataDate   DateTime
+   751→  isBaseline Boolean  @default(false)
+   752→  createdAt  DateTime @default(now())
+   753→  updatedAt  DateTime @updatedAt
+   754→
+   755→  @@index([projectId])
+   756→}
+   757→
+   758→// ScheduleActivity: per-run cached CPM dates for an activity (engine output).
+   759→model ScheduleActivity {
+   760→  id        String   @id @default(cuid())
+   761→  projectId String
+   762→  runId     String
+   763→  createdAt DateTime @default(now())
+   764→  updatedAt DateTime @updatedAt
+   765→
+   766→  @@index([projectId])
+   767→  @@index([runId])
+   768→}
+   769→
+   770→// ScheduleLink: predecessor↔successor relationship with lag (FS/SS/FF/SF).
+   771→model ScheduleLink {
+   772→  id            String   @id @default(cuid())
+   773→  projectId     String
+   774→  predecessorId String
+   775→  successorId   String
+   776→  relType       String   // "FS" | "SS" | "FF" | "SF"
+   777→  lagDays       Int      @default(0) // negative allowed per BR-P4
+   778→  createdAt     DateTime @default(now())
+   779→  updatedAt     DateTime @updatedAt
+   780→
+   781→  @@index([projectId])
+   782→  @@index([predecessorId])
+   783→  @@index([successorId])
+   784→}
+   785→
+   786→// -----------------------------------------------------------------------------
+   787→// Phase 3 — Documents (Drawing register, submittals, RFI, correspondence)
+   788→// -----------------------------------------------------------------------------
+   789→
+   790→// Drawing: a drawing register entry (discipline, current revision, etc.).
+   791→model Drawing {
+   792→  id         String   @id @default(cuid())
+   793→  projectId  String
+   794→  code       String
+   795→  titleEn    String
+   796→  titleAr    String?
+   797→  discipline String
+   798→  createdAt  DateTime @default(now())
+   799→  updatedAt  DateTime @updatedAt
+   800→
+   801→  @@index([projectId])
+   802→}
+   803→
+   804→// DrawingRevision: a specific revision of a drawing.
+   805→model DrawingRevision {
+   806→  id         String   @id @default(cuid())
+   807→  projectId  String
+   808→  drawingId  String
+   809→  revNo      Int
+   810→  createdAt  DateTime @default(now())
+   811→  updatedAt  DateTime @updatedAt
+   812→
+   813→  @@index([projectId])
+   814→  @@index([drawingId])
+   815→}
+   816→
+   817→// Submittal: shop-drawing / material submittal register entry.
+   818→model Submittal {
+   819→  id        String   @id @default(cuid())
+   820→  projectId String
+   821→  refNo     String
+   822→  subjectEn String
+   823→  createdAt DateTime @default(now())
+   824→  updatedAt DateTime @updatedAt
+   825→
+   826→  @@index([projectId])
+   827→}
+   828→
+   829→// RFI: Request for Information log entry.
+   830→model Rfi {
+   831→  id        String   @id @default(cuid())
+   832→  projectId String
+   833→  refNo     String
+   834→  subjectEn String
+   835→  createdAt DateTime @default(now())
+   836→  updatedAt DateTime @updatedAt
+   837→
+   838→  @@index([projectId])
+   839→}
+   840→
+   841→// Transmittal: outgoing document transmittal log entry.
+   842→model Transmittal {
+   843→  id        String   @id @default(cuid())
+   844→  projectId String
+   845→  refNo     String
+   846→  createdAt DateTime @default(now())
+   847→  updatedAt DateTime @updatedAt
+   848→
+   849→  @@index([projectId])
+   850→}
+   851→
+   852→// Correspondence: incoming/outgoing correspondence log entry.
+   853→model Correspondence {
+   854→  id        String   @id @default(cuid())
+   855→  projectId String
+   856→  refNo     String
+   857→  subjectEn String
+   858→  createdAt DateTime @default(now())
+   859→  updatedAt DateTime @updatedAt
+   860→
+   861→  @@index([projectId])
+   862→}
+   863→
+   864→// -----------------------------------------------------------------------------
+   865→// Phase 4 — Payments & cost-schedule integration
+   866→// -----------------------------------------------------------------------------
+   867→
+   868→// PaymentApplication: interim payment certificate (IPC) per period.
+   869→model PaymentApplication {
+   870→  id         String   @id @default(cuid())
+   871→  projectId  String
+   872→  ipcNo      Int
+   873→  status     String   @default("draft") // "draft" | "submitted" | "certified" | "rejected"
+   874→  createdAt  DateTime @default(now())
+   875→  updatedAt  DateTime @updatedAt
+   876→
+   877→  @@index([projectId])
+   878→}
+   879→
+   880→// Variation: a contract variation order (linked to a BoQDocument with
+   881→// docType="variation" once that field is added in Phase 4).
+   882→model Variation {
+   883→  id         String   @id @default(cuid())
+   884→  projectId  String
+   885→  refNo      String
+   886→  title      String
+   887→  status     String   @default("draft") // "draft" | "submitted" | "approved" | "rejected"
+   888→  createdAt  DateTime @default(now())
+   889→  updatedAt  DateTime @updatedAt
+   890→
+   891→  @@index([projectId])
+   892→}
+   893→
+   894→// BoQItemScheduleLink: ★ the differentiator — links a BoQItem to a Phase 2
+   895→// Activity so cost can be plotted against the schedule over time.
+   896→model BoQItemScheduleLink {
+   897→  id           String   @id @default(cuid())
+   898→  projectId    String
+   899→  boqItemId    String
+   900→  activityId   String
+   901→  allocationPct String  @default("100") // decimal string — % of BoQ item cost assigned to activity
+   902→  createdAt    DateTime @default(now())
+   903→  updatedAt    DateTime @updatedAt
+   904→
+   905→  @@index([projectId])
+   906→  @@index([boqItemId])
+   907→  @@index([activityId])
+   908→}
+   909→

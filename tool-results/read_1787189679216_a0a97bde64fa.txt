@@ -1,0 +1,860 @@
+     1→# ENTITY-RELATIONSHIP DESIGN — v1.1 (Web Adaptation)
+     2→
+     3→**Document**: `docs/planning/ERD_V1.1_WEB.md`
+     4→**Product**: TechOffice (working title)
+     5→**Status**: Phase 0 artifact, v1.1 (Web Adaptation)
+     6→**Governing docs**: `CONSTITUTION_V1.1_WEB.md`, `SPEC_PHASE1_BOQ_WEB.md`
+     7→**Source**: Turn 20 of the imported GLM 5.2 conversation (`docs/imported/full-conversation.md`).
+     8→
+     9→> **How to read this document**: v1.0 specified SQLite table DDL for an Electron app (App DB + .toproj Project DB). v1.1 translates the same logical schema into **Prisma models** for a Next.js web app with a single database. **All Phase 1 (BoQ) tables are preserved exactly** — only their physical representation changes (SQLite DDL → Prisma schema). Phase 2-4 tables are reserved additive (concrete enough to prove they fit, finalized in their phase spec).
+    10→
+    11→---
+    12→
+    13→## 1. Storage Architecture
+    14→
+    15→> ▶▶ **AMENDMENT vs v1.0**: v1.0 had two databases — App DB (`app.db`) for global libraries/settings, and Project DB (`.toproj` file) per project. v1.1 has **one Prisma-managed database** with `userId` / `projectId` discriminators on every table. Logical separation is preserved; physical separation is not.
+    16→
+    17→### v1.1 Storage Model
+    18→
+    19→```mermaid
+    20→graph TB
+    21→    subgraph "Single Prisma DB (SQLite dev → Postgres prod)"
+    22→        subgraph "App-level (per-user, no project FK)"
+    23→            User["User"]
+    24→            Session["Session"]
+    25→            UserSettings["UserSettings"]
+    26→            CompanyProfile["CompanyProfile"]
+    27→            FileUpload["FileUpload"]
+    28→            AuditLog["AuditLog"]
+    29→            Subscription["Subscription (Phase 5)"]
+    30→            Library["ItemLibrary · LibraryCategory"]
+    31→            MasterRef["Unit · UnitAlias · RebarDiameter · ShapeCode (master)"]
+    32→        end
+    33→
+    34→        subgraph "Project-scoped (projectId FK)"
+    35→            Project["Project"]
+    36→            ProjectSnapshot["ProjectSnapshot"]
+    37→            ProjectRef["ProjectUnit · ProjectRebarDiameter · ProjectShapeCode (frozen snapshots)"]
+    38→            BoQDoc["BoQDocument"]
+    39→            BoQSec["BoQSection"]
+    40→            BoQItem["BoQItem"]
+    41→            RateAnalysis["RateAnalysis · RateAnalysisLine"]
+    42→            CalcRec["CalculationRecord"]
+    43→            ImportBatch["ImportBatch"]
+    44→        end
+    45→
+    46→        subgraph "Future: Phase 2-4 (additive, reserved)"
+    47→            Planning["WbsNode · Activity · ActivityRelationship · ScheduleRun · ActivityDate · ActivityBoQLink (P2)"]
+    48→            Docs["Drawing · DrawingRevision · Submittal · RFI · Correspondence · TransmittalLine (P3)"]
+    49→            Payments["PaymentApplication · PaymentLine · PaymentDeduction · Variation · DailyReport · DailyReportManpower · DailyReportEquipment · DailyReportWork · ActivityProgress (P4)"]
+    50→        end
+    51→    end
+    52→
+    53→    User -- "1:N" Project
+    54→    User -- "1:N" Library
+    55→    User -- "1:N" FileUpload
+    56→    User -- "1:N" AuditLog
+    57→    Project -- "1:N" BoQDoc
+    58→    BoQDoc -- "1:N" BoQSec
+    59→    BoQSec -- "1:N" BoQItem
+    60→    BoQItem -- "1:1 RateAnalysis" RateAnalysis
+    61→    RateAnalysis -- "1:N" RateAnalysisLine
+    62→    BoQItem -- "0:N" CalcRec
+    63→    BoQItem -- "0:N" ImportBatch
+    64→```
+    65→
+    66→### Why snapshots inside every project (unchanged from v1.0 rationale)
+    67→
+    68→A project opened on a different user's machine, or after the global library has been edited, must produce identical documents. Reference data (Units, RebarDiameter, ShapeCode) is **copied into project-scoped snapshot tables** at project creation (`ProjectUnit`, `ProjectRebarDiameter`, `ProjectShapeCode`); projects never reference the global master. Cross-table foreign keys to the master are forbidden; project rows reference the project-scoped snapshots.
+    69→
+    70→### File format & save model (v1.1 mechanism)
+    71→
+    72→- **Atomic saves**: Prisma `$transaction` — multi-row writes are all-or-nothing at the DB level.
+    73→- **Debounced autosave**: 2 s debounce on client; PATCH with full row on commit.
+    74→- **Conflict detection**: `version: Int` column on every updatable aggregate; PATCH WHERE clause includes `version: expectedVersion`. 0 rows updated → 409 Conflict.
+    75→- **Snapshots**: `ProjectSnapshot` table stores serialized project state (JSON of all rows) + referenced `FileUpload` IDs. Created on interval, before imports, before destructive ops.
+    76→- **Attachments**: `FileUpload` table — file blob on disk (or S3-compatible in prod) + metadata in DB. SHA-256 + original filename + MIME type tracked.
+    77→
+    78→---
+    79→
+    80→## 2. Global Conventions (apply to every model)
+    81→
+    82→| Convention | v1.0 (SQLite DDL) | v1.1 (Prisma schema) |
+    83→|------------|--------------------|----------------------|
+    84→| Primary key | `id` UUID v7 TEXT (time-ordered) | `id String @id @default(cuid())` (CUID is time-ordered; UUID v7 acceptable alternative via `@default(uuid(7))`) |
+    85→| Audit columns | `created_at`, `updated_at` TEXT ISO-8601; `deleted_at` nullable | `createdAt DateTime @default(now())`; `updatedAt DateTime @updatedAt`; `deletedAt DateTime?` (soft delete) |
+    86→| Money & quantities | TEXT storing decimal strings, validated by zod | `String` (decimal as string); validated by zod in `src/shared/schemas/` |
+    87→| Booleans | INTEGER 0/1 | `Boolean @default(false)` |
+    88→| Enums | TEXT + CHECK constraint + zod enum | Prisma `enum` (for SQLite: stored as String + zod validation in app layer) |
+    89→| Bilingual | `name_en` / `name_ar` pair (never concatenated) | `nameEn String` / `nameAr String?` (Ar optional where Phase 1 spec allows, required where spec demands) |
+    90→| Foreign keys | `PRAGMA foreign_keys = ON`; cascades declared | Prisma `relation` + `onDelete: Cascade` / `SetNull` per relationship |
+    91→| One zod schema per table | in `src/shared/schemas/<domain>/<table>.ts` | **Unchanged** — zod is the source of truth; Prisma schema mirrors it |
+    92→| Schema evolution | `PRAGMA user_version` + ordered migrations | `prisma migrate dev` (Prisma Migrate); migrations are additive-only (Phase 1 tables never get rewritten) |
+    93→| Soft delete | `deleted_at` nullable | `deletedAt DateTime?`; queries use `WHERE deletedAt IS NULL` (Prisma middleware enforces) |
+    94→
+    95→---
+    96→
+    97→## 3. Phase 1 Models — App-Level (per-user, no Project FK)
+    98→
+    99→### 3.1 User & Auth
+   100→
+   101→```prisma
+   102→model User {
+   103→  id              String   @id @default(cuid())
+   104→  email           String   @unique
+   105→  emailVerified   DateTime?
+   106→  passwordHash    String?  // null if OAuth-only
+   107→  name            String?
+   108→  image           String?
+   109→  createdAt       DateTime @default(now())
+   110→  updatedAt       DateTime @updatedAt
+   111→  deletedAt       DateTime?
+   112→
+   113→  sessions        Session[]
+   114→  userSettings    UserSettings?
+   115→  companyProfile  CompanyProfile?
+   116→  projects        Project[]
+   117→  libraryItems    ItemLibrary[]
+   118→  fileUploads     FileUpload[]
+   119→  auditLogs       AuditLog[]
+   120→
+   121→  @@index([email])
+   122→}
+   123→
+   124→model Session {
+   125→  id           String   @id @default(cuid())
+   126→  sessionToken String   @unique
+   127→  userId       String
+   128→  expires      DateTime
+   129→  createdAt    DateTime @default(now())
+   130→  updatedAt    DateTime @updatedAt
+   131→
+   132→  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   133→
+   134→  @@index([userId])
+   135→}
+   136→
+   137→model VerificationToken {
+   138→  identifier String
+   139→  token      String   @unique
+   140→  expires    DateTime
+   141→
+   142→  @@unique([identifier, token])
+   143→}
+   144→```
+   145→
+   146→> **Notes**: This is the standard NextAuth (Auth.js v4) schema. `emailVerified` and `VerificationToken` support email-verify flows. OAuth accounts table omitted in Phase 1 (Phase 5 addition if Google OAuth is added).
+   147→
+   148→### 3.2 User Settings, Company Profile, Subscription
+   149→
+   150→```prisma
+   151→model UserSettings {
+   152→  id                String   @id @default(cuid())
+   153→  userId            String   @unique
+   154→  locale            String   @default("en")    // "en" | "ar"
+   155→  theme             String   @default("light")  // "light" | "dark" | "system"
+   156→  autosaveIntervalMs Int     @default(2000)
+   157→  createdAt          DateTime @default(now())
+   158→  updatedAt          DateTime @updatedAt
+   159→
+   160→  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   161→}
+   162→
+   163→model CompanyProfile {
+   164→  id           String   @id @default(cuid())
+   165→  userId       String   @unique
+   166→  nameEn       String
+   167→  nameAr       String?
+   168→  address      String?
+   169→  phone        String?
+   170→  email        String?
+   171→  logoFileId   String?  // → FileUpload.id
+   172→  createdAt    DateTime @default(now())
+   173→  updatedAt    DateTime @updatedAt
+   174→
+   175→  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+   176→  logoFile     FileUpload? @relation("CompanyLogo", fields: [logoFileId], references: [id])
+   177→}
+   178→
+   179→model Subscription {
+   180→  id              String   @id @default(cuid())
+   181→  userId          String   @unique
+   182→  plan            String   @default("free")  // "free" | "pro" | "enterprise" — Phase 5 tiers
+   183→  status          String   @default("active")  // "active" | "past_due" | "canceled"
+   184→  stripeCustomerId String?  // Phase 5: merchant of record
+   185→  currentPeriodEnd DateTime?
+   186→  createdAt       DateTime @default(now())
+   187→  updatedAt       DateTime @updatedAt
+   188→
+   189→  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   190→}
+   191→```
+   192→
+   193→### 3.3 File Uploads (attachments — logos, future drawings, etc.)
+   194→
+   195→```prisma
+   196→model FileUpload {
+   197→  id              String   @id @default(cuid())
+   198→  userId          String   // owner
+   199→  storageKey      String   // path in blob storage (e.g., "uploads/{userId}/{sha256}.bin")
+   200→  originalFilename String
+   201→  mimeType        String   // validated against allowlist
+   202→  sizeBytes       Int      // checked against per-type limit
+   203→  sha256          String   // computed server-side
+   204→  createdAt       DateTime @default(now())
+   205→  deletedAt       DateTime?
+   206→
+   207→  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   208→  companyProfileLogo CompanyProfile? @relation("CompanyLogo")
+   209→
+   210→  @@index([userId, createdAt])
+   211→  @@index([sha256])
+   212→}
+   213→```
+   214→
+   215→### 3.4 Audit Log
+   216→
+   217→```prisma
+   218→model AuditLog {
+   219→  id          String   @id @default(cuid())
+   220→  userId      String
+   221→  action      String   // "create" | "update" | "delete" | "restore" | "import" | "export"
+   222→  entityType  String   // "Project" | "BoQDocument" | "BoQItem" | ...
+   223→  entityId    String
+   224→  beforeData  String?  // JSON
+   225→  afterData   String?  // JSON
+   226→  ipAddress   String?
+   227→  userAgent   String?
+   228→  createdAt   DateTime @default(now())
+   229→
+   230→  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   231→
+   232→  @@index([userId, createdAt])
+   233→  @@index([entityType, entityId])
+   234→}
+   235→```
+   236→
+   237→---
+   238→
+   239→## 4. Phase 1 Models — Reference Tables (master copies, app-level)
+   240→
+   241→> These are the **master** copies. At project creation, snapshots are copied into project-scoped tables (§5.1 below).
+   242→
+   243→```prisma
+   244→model Unit {
+   245→  id                String  @id @default(cuid())
+   246→  code              String  @unique  // "m3" | "m2" | "m" | "kg" | "ton" | "no" | "ls" | "hr" | "day"
+   247→  kind              String  // "volume" | "area" | "length" | "mass" | "count" | "time" | "lump"
+   248→  enAbbr            String
+   249→  arAbbr            String
+   250→  defaultPrecision  Int     // decimal places per BR-6
+   251→  createdAt         DateTime @default(now())
+   252→  updatedAt         DateTime @updatedAt
+   253→
+   254→  aliases           UnitAlias[]
+   255→  projectSnapshots  ProjectUnit[]
+   256→}
+   257→
+   258→model UnitAlias {
+   259→  id        String  @id @default(cuid())
+   260→  alias     String  @unique  // case-insensitive match in app layer
+   261→  unitId    String
+   262→  createdAt DateTime @default(now())
+   263→
+   264→  unit      Unit    @relation(fields: [unitId], references: [id], onDelete: Cascade)
+   265→}
+   266→
+   267→model RebarDiameter {
+   268→  diameterMm  Int      @id   // 6, 8, 10, ..., 40
+   269→  unitWeight  String         // kg/m as decimal string (BR-11 values)
+   270→  createdAt   DateTime @default(now())
+   271→  updatedAt   DateTime @updatedAt
+   272→
+   273→  projectSnapshots  ProjectRebarDiameter[]
+   274→}
+   275→
+   276→model ShapeCode {
+   277→  code          String  @id   // "00" | "01" | "11" | "21" | "31" | "41" | "51" | "99"
+   278→  descriptionEn String
+   279→  descriptionAr String?
+   280→  createdAt     DateTime @default(now())
+   281→  updatedAt     DateTime @updatedAt
+   282→
+   283→  projectSnapshots  ProjectShapeCode[]
+   284→}
+   285→```
+   286→
+   287→---
+   288→
+   289→## 5. Phase 1 Models — Project-Scoped
+   290→
+   291→### 5.1 Project + Project-scoped snapshots
+   292→
+   293→```prisma
+   294→model Project {
+   295→  id                    String   @id @default(cuid())
+   296→  userId                String   // owner
+   297→  projectUuid           String   @unique  // for snapshot folders & provenance
+   298→  name                  String
+   299→  clientName            String?
+   300→  location              String?
+   301→  contractNo            String?
+   302→  currency              String   @default("EGP")  // ISO 4217
+   303→  vatEnabled            Boolean  @default(false)
+   304→  vatPercent            String   @default("0")    // decimal string
+   305→  numberingPattern      String   @default("S.n")   // BR-7
+   306→  overheadPercentDefault String  @default("10")    // feeds S5 defaults
+   307→  profitPercentDefault  String   @default("15")
+   308→  precisionOverrides    String?  // JSON: per-unit precision overrides per BR-6
+   309→  languagePref          String   @default("en")
+   310→  appVersionCreated     String
+   311→  version               Int      @default(1)  // optimistic concurrency
+   312→  createdAt             DateTime @default(now())
+   313→  updatedAt             DateTime @updatedAt
+   314→  deletedAt             DateTime?
+   315→
+   316→  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+   317→  boqDocuments          BoQDocument[]
+   318→  snapshots            ProjectSnapshot[]
+   319→  projectUnits          ProjectUnit[]
+   320→  projectRebarDiameters ProjectRebarDiameter[]
+   321→  projectShapeCodes     ProjectShapeCode[]
+   322→  importBatches         ImportBatch[]
+   323→
+   324→  @@index([userId, deletedAt])
+   325→}
+   326→
+   327→// Frozen snapshot of units at project creation
+   328→model ProjectUnit {
+   329→  id                String  @id @default(cuid())
+   330→  projectId         String
+   331→  code              String
+   332→  kind              String
+   333→  enAbbr            String
+   334→  arAbbr            String
+   335→  defaultPrecision  Int
+   336→
+   337→  project           Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   338→
+   339→  @@unique([projectId, code])
+   340→  @@index([projectId])
+   341→}
+   342→
+   343→model ProjectRebarDiameter {
+   344→  projectId   String
+   345→  diameterMm  Int
+   346→  unitWeight  String
+   347→
+   348→  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   349→
+   350→  @@id([projectId, diameterMm])
+   351→}
+   352→
+   353→model ProjectShapeCode {
+   354→  projectId     String
+   355→  code          String
+   356→  descriptionEn String
+   357→  descriptionAr String?
+   358→
+   359→  project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   360→
+   361→  @@id([projectId, code])
+   362→}
+   363→
+   364→model ProjectSnapshot {
+   365→  id          String   @id @default(cuid())
+   366→  projectId   String
+   367→  reason      String   // "auto" | "manual" | "pre_import" | "pre_migration" | "pre_restore"
+   368→  label       String?
+   369→  sizeBytes   Int
+   370→  payload     String   // JSON of all project rows at snapshot time
+   371→  createdAt   DateTime @default(now())
+   372→
+   373→  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   374→
+   375→  @@index([projectId, createdAt])
+   376→}
+   377→```
+   378→
+   379→### 5.2 BoQ Documents → Sections → Items
+   380→
+   381→```prisma
+   382→model BoQDocument {
+   383→  id          String   @id @default(cuid())
+   384→  projectId   String
+   385→  nameEn      String
+   386→  nameAr      String?
+   387→  docType     String   @default("boq")  // "boq" | "variation" | "other" — Phase 4 variations need no migration
+   388→  notes       String?
+   389→  sortOrder   Int      @default(0)
+   390→  version     Int      @default(1)
+   391→  createdAt   DateTime @default(now())
+   392→  updatedAt   DateTime @updatedAt
+   393→  deletedAt   DateTime?
+   394→
+   395→  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   396→  sections    BoQSection[]
+   397→
+   398→  @@index([projectId, deletedAt])
+   399→}
+   400→
+   401→model BoQSection {
+   402→  id          String   @id @default(cuid())
+   403→  documentId  String
+   404→  code        String
+   405→  nameEn      String
+   406→  nameAr      String?
+   407→  sortOrder   Int      @default(0)
+   408→  version     Int      @default(1)
+   409→  createdAt   DateTime @default(now())
+   410→  updatedAt   DateTime @updatedAt
+   411→  deletedAt   DateTime?
+   412→
+   413→  document    BoQDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+   414→  items       BoQItem[]
+   415→
+   416→  @@index([documentId, deletedAt])
+   417→}
+   418→
+   419→model BoQItem {
+   420→  id               String   @id @default(cuid())
+   421→  sectionId        String
+   422→  code             String   // BR-7 numbering
+   423→  descriptionEn    String
+   424→  descriptionAr    String?
+   425→  itemType         String   // "rate" | "lump_sum" | "provisional_sum" | "daywork" | "unit_only"
+   426→  unitCode         String   // references ProjectUnit.code (no FK — snapshot table)
+   427→  qty              String   // decimal string; LS locked to "1" per BR-5 (service-enforced)
+   428→  rate             String   // decimal string
+   429→  sortOrder        Int      @default(0)
+   430→  notes            String?
+   431→  sourceLibraryId  String?  // provenance only — not a FK (informational)
+   432→  importBatchId    String?  // → ImportBatch.id
+   433→  version          Int      @default(1)
+   434→  createdAt        DateTime @default(now())
+   435→  updatedAt        DateTime @updatedAt
+   436→  deletedAt        DateTime?
+   437→
+   438→  section          BoQSection          @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+   439→  rateAnalysis     RateAnalysis?
+   440→  calculationRecords CalculationRecord[]
+   441→  importBatch      ImportBatch?        @relation(fields: [importBatchId], references: [id])
+   442→
+   443→  @@index([sectionId, deletedAt])
+   444→  @@index([importBatchId])
+   445→}
+   446→```
+   447→
+   448→### 5.3 Rate Analysis (F4)
+   449→
+   450→```prisma
+   451→model RateAnalysis {
+   452→  id                String   @id @default(cuid())
+   453→  boqItemId         String   @unique  // 1:1 with item per spec S5
+   454→  name              String
+   455→  outputUnitCode    String   // references ProjectUnit.code
+   456→  overheadPercent   String   // decimal string
+   457→  profitPercent     String
+   458→  lastAppliedRate   String?  // shown in S5 for restore
+   459→  version           Int      @default(1)
+   460→  createdAt         DateTime @default(now())
+   461→  updatedAt         DateTime @updatedAt
+   462→
+   463→  boqItem           BoQItem            @relation(fields: [boqItemId], references: [id], onDelete: Cascade)
+   464→  lines             RateAnalysisLine[]
+   465→
+   466→  @@index([boqItemId])
+   467→}
+   468→
+   469→model RateAnalysisLine {
+   470→  id                  String   @id @default(cuid())
+   471→  analysisId          String
+   472→  sortOrder           Int      @default(0)
+   473→  lineGroup           String   // "material" | "labor" | "equipment" | "subcontract"
+   474→  nameEn              String
+   475→  nameAr              String?
+   476→  unitCode            String?  // consumption unit (nullable for crew-mode labor)
+   477→  consumption         String?  // decimal string
+   478→  unitCost            String?  // decimal string
+   479→  wastePercent        String?  // materials only (BR-8); default "0"
+   480→  crewCostPerDay      String?  // nullable — S5 crew entry mode
+   481→  crewOutputPerDay    String?  // nullable — S5 crew entry mode
+   482→  createdAt           DateTime @default(now())
+   483→  updatedAt           DateTime @updatedAt
+   484→
+   485→  analysis            RateAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+   486→
+   487→  @@index([analysisId, sortOrder])
+   488→}
+   489→```
+   490→
+   491→> **Mode rule** (carried over from v1.0, zod-refined + service-enforced): materials/equipment/subcontract = `consumption + unitCost` (`wastePercent` optional for materials); labor = either consumption-mode OR crew-mode (`crewCostPerDay ÷ crewOutputPerDay`), never both. BR-8..BR-10 compute in domain layer.
+   492→
+   493→### 5.4 Calculation Records (F5 audit trail)
+   494→
+   495→```prisma
+   496→model CalculationRecord {
+   497→  id                String   @id @default(cuid())
+   498→  projectId         String
+   499→  calculatorType    String   // "concrete" | "formwork" | "rebar" | "masonry" | "plaster" | "paint"
+   500→  name              String
+   501→  inputs            String   // JSON: zod schema per calculator type
+   502→  resultValue       String   // decimal string
+   503→  resultUnitCode    String
+   504→  details           String   // JSON: row-by-row breakdown
+   505→  linkedBoqItemId   String?  // nullable — orphan-safe per F5
+   506→  appliedAt         DateTime?  // BR-13: applying never silently overwrites
+   507→  version           Int      @default(1)
+   508→  createdAt         DateTime @default(now())
+   509→  updatedAt         DateTime @updatedAt
+   510→
+   511→  linkedBoqItem     BoQItem?  @relation(fields: [linkedBoqItemId], references: [id], onDelete: SetNull)
+   512→
+   513→  @@index([projectId, createdAt])
+   514→  @@index([linkedBoqItemId])
+   515→}
+   516→```
+   517→
+   518→### 5.5 Import Batches (F7 provenance)
+   519→
+   520→```prisma
+   521→model ImportBatch {
+   522→  id              String   @id @default(cuid())
+   523→  projectId       String
+   524→  sourceFilename  String
+   525→  sourceSha256    String
+   526→  mapping         String   // JSON: column mapping
+   527→  rowsTotal       Int
+   528→  rowsImported    Int
+   529→  importedAt      DateTime @default(now())
+   530→
+   531→  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   532→  boqItems        BoQItem[]
+   533→
+   534→  @@index([projectId, importedAt])
+   535→}
+   536→```
+   537→
+   538→---
+   539→
+   540→## 6. Phase 1 Models — Item Library (F6, app-level per-user)
+   541→
+   542→```prisma
+   543→model LibraryCategory {
+   544→  id          String   @id @default(cuid())
+   545→  userId      String?  // null = global seed category
+   546→  parentId    String?  // self-tree
+   547→  nameEn      String
+   548→  nameAr      String?
+   549→  sortOrder   Int      @default(0)
+   550→  createdAt   DateTime @default(now())
+   551→  updatedAt   DateTime @updatedAt
+   552→
+   553→  parent      LibraryCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+   554→  children    LibraryCategory[] @relation("CategoryTree")
+   555→  items       ItemLibrary[]
+   556→
+   557→  @@index([parentId])
+   558→}
+   559→
+   560→model ItemLibrary {
+   561→  id            String   @id @default(cuid())
+   562→  userId        String?  // null = global seed; non-null = user-saved
+   563→  categoryId    String?
+   564→  descriptionEn String
+   565→  descriptionAr String?
+   566→  unitCode      String   // references master Unit.code (library is app-level, no project snapshot needed)
+   567→  specNotes     String?
+   568→  defaultRate   String?  // decimal string; null = blank per F6 seed spec
+   569→  source        String   @default("seed")  // "seed" | "user"
+   570→  createdAt     DateTime @default(now())
+   571→  updatedAt     DateTime @updatedAt
+   572→  deletedAt     DateTime?
+   573→
+   574→  user          User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+   575→  category      LibraryCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+   576→
+   577→  @@index([userId, deletedAt])
+   578→  @@index([categoryId])
+   579→}
+   580→```
+   581→
+   582→---
+   583→
+   584→## 7. Phase 2-4 Models — Reserved Additive (concrete shape, finalized in their phase spec)
+   585→
+   586→> These are reserved now so the schema never gets rewritten. Phase 1 tables are untouched by any of them.
+   587→
+   588→### 7.1 Planning (Phase 2)
+   589→
+   590→```prisma
+   591→// WBS tree
+   592→model WbsNode {
+   593→  id          String   @id @default(cuid())
+   594→  projectId   String
+   595→  parentId    String?
+   596→  code        String
+   597→  nameEn      String
+   598→  nameAr      String?
+   599→  sortOrder   Int      @default(0)
+   600→  // ... (relation fields)
+   601→}
+   602→
+   603→// CPM entities per SPEC_PHASE2A_CPM.md (turn 28)
+   604→model Activity {
+   605→  id              String   @id @default(cuid())
+   606→  projectId       String
+   607→  wbsNodeId       String?
+   608→  code            String
+   609→  nameEn          String
+   610→  nameAr          String?
+   611→  type            String   // "task" | "milestone"
+   612→  durationDays    Int
+   613→  calendarId      String?
+   614→  percentComplete String   @default("0")
+   615→  status          String   @default("not_started")
+   616→  notes           String?
+   617→  // ...
+   618→}
+   619→
+   620→model ActivityRelationship {
+   621→  id            String   @id @default(cuid())
+   622→  predecessorId String
+   623→  successorId   String
+   624→  relType       String   // "FS" | "SS" | "FF" | "SF"
+   625→  lagDays       Int      // negative allowed per BR-P4
+   626→}
+   627→
+   628→model ScheduleRun {
+   629→  id         String   @id @default(cuid())
+   630→  projectId  String
+   631→  dataDate   DateTime
+   632→  isBaseline Boolean  @default(false)
+   633→  createdAt  DateTime @default(now())
+   634→}
+   635→
+   636→model ActivityDate {
+   637→  // CPM cache; engine output, never hand-edited per SPEC 2A
+   638→  runId             String
+   639→  activityId        String
+   640→  earlyStart        DateTime
+   641→  earlyFinish       DateTime
+   642→  lateStart         DateTime
+   643→  lateFinish        DateTime
+   644→  totalFloatDays    Int
+   645→  isCritical        Boolean
+   646→
+   647→  @@id([runId, activityId])
+   648→}
+   649→
+   650→model ActivityBoQLink {
+   651→  // ★ the differentiator: cost-schedule integration
+   652→  activityId      String
+   653→  boqItemId       String
+   654→  allocationPercent String
+   655→
+   656→  @@id([activityId, boqItemId])
+   657→}
+   658→
+   659→model Calendar {
+   660→  id          String   @id @default(cuid())
+   661→  projectId   String
+   662→  name        String
+   663→  workdayMask Int      // bitmask, Sun=1...Sat=64
+   664→  isDefault   Boolean  @default(false)
+   665→}
+   666→
+   667→model CalendarException {
+   668→  id          String   @id @default(cuid())
+   669→  calendarId  String
+   670→  date        DateTime
+   671→  isWorking   Boolean
+   672→  name        String?
+   673→}
+   674→```
+   675→
+   676→### 7.2 Documents (Phase 3)
+   677→
+   678→```prisma
+   679→model Drawing {
+   680→  id              String   @id @default(cuid())
+   681→  projectId       String
+   682→  code            String
+   683→  titleEn         String
+   684→  titleAr         String?
+   685→  discipline      String
+   686→  currentRevision String?
+   687→  // ...
+   688→}
+   689→
+   690→model DrawingRevision {
+   691→  id              String   @id @default(cuid())
+   692→  drawingId       String
+   693→  revNo           Int
+   694→  date            DateTime
+   695→  description     String?
+   696→  status          String
+   697→  fileUploadId    String?  // → FileUpload.id (DXF/DWG-converted)
+   698→  sourceFormat    String   // "dxf" | "dwg-converted"
+   699→  originalFilename String?
+   700→}
+   701→
+   702→model Submittal { /* id, ref_no, type, subject_en/ar, discipline, dates, status, reviewer, notes */ }
+   703→model SubmittalEvent { /* submittal_id, date, status, note */ }
+   704→model RFI { /* id, ref_no, subject_en/ar, discipline, dates, status, question, answer */ }
+   705→model Correspondence { /* id, direction, ref_no, date, type, subject_en/ar, from, to, body */ }
+   706→model TransmittalLine { /* correspondence_id, doc_ref, description, copies */ }
+   707→```
+   708→
+   709→### 7.3 Payments (Phase 4) — per SPEC_PHASE4A_PAYMENTS.md (turn 30)
+   710→
+   711→```prisma
+   712→model PaymentApplication {
+   713→  id                String   @id @default(cuid())
+   714→  projectId         String
+   715→  ipcNo             Int
+   716→  periodStart       DateTime
+   717→  periodEnd         DateTime
+   718→  submissionDate    DateTime
+   719→  retentionPercent  String
+   720→  advanceAmount     String   @default("0")
+   721→  previousCertified String   @default("0")
+   722→  status            String   @default("draft")  // "draft" | "submitted" | "certified" | "rejected"
+   723→  // ...
+   724→}
+   725→
+   726→model PaymentLine {
+   727→  id              String   @id @default(cuid())
+   728→  applicationId   String
+   729→  boqItemId      String
+   730→  qtyThisPeriod   String
+   731→  qtyCumulative   String
+   732→  amountThisPeriod String
+   733→  amountCumulative String
+   734→}
+   735→
+   736→model PaymentDeduction {
+   737→  id           String   @id @default(cuid())
+   738→  applicationId String
+   739→  kind         String   // "penalty" | "backcharge" | "other"
+   740→  description  String
+   741→  amount       String
+   742→}
+   743→
+   744→model Variation {
+   745→  id                  String   @id @default(cuid())
+   746→  projectId           String
+   747→  refNo               String
+   748→  title               String
+   749→  boqDocumentId       String?  // → BoQDocument with docType="variation"
+   750→  status              String   @default("draft")  // "draft" | "submitted" | "approved" | "rejected"
+   751→  linkedApplicationId String?
+   752→}
+   753→
+   754→model DailyReport {
+   755→  id    String   @id @default(cuid())
+   756→  projectId String
+   757→  date  DateTime
+   758→  weather String?
+   759→  temperature String?
+   760→  notes String?
+   761→}
+   762→
+   763→model DailyReportManpower { /* report_id, trade, count */ }
+   764→model DailyReportEquipment { /* report_id, equipment, count, hours */ }
+   765→model DailyReportWork { /* report_id, location, description_en/ar, activity_id? */ }
+   766→model ActivityProgress { /* activity_id, schedule_run_id, percent_complete, actual_start, actual_finish */ }
+   767→```
+   768→
+   769→---
+   770→
+   771→## 8. Seed Data (v1.1 ships with)
+   772→
+   773→> **Unchanged from v1.0 (turn 30 APPENDIX_SEED_DATA)**. Implementation: Prisma `seed.ts` script inserts these on first run.
+   774→
+   775→### 8.1 Rebar diameter table (kg/m) — complete
+   776→
+   777→Ø6→0.222 · Ø8→0.395 · Ø10→0.617 · Ø12→0.888 · Ø16→1.578 · Ø18→2.000 · Ø20→2.466 · Ø22→2.984 · Ø25→3.854 · Ø28→4.834 · Ø32→6.313 · Ø36→7.991 · Ø40→9.865
+   778→
+   779→### 8.2 Unit alias table — complete
+   780→
+   781→| UNIT | ALIASES |
+   782→|------|---------|
+   783→| m³ | `m3 m³ M3 m^3 م3 م٣ متر مكعب` |
+   784→| m² | `m2 m² M2 م2 م٢ متر مربع` |
+   785→| m | `m M م متر lm mtr` |
+   786→| kg | `kg KG كجم كيلوجرام kgm` |
+   787→| ton | `ton Ton TON طن t` |
+   788→| no. | `no No NO nos No. ea EA each عدد` |
+   789→| LS | `ls LS L.S lump sum مقطوعية` |
+   790→| hr | `hr hour hrs ساعة` |
+   791→| day | `day days يوم أيام` |
+   792→
+   793→### 8.3 Shape codes (BS 8666 subset)
+   794→
+   795→Seed with: 00 straight · 01 stock length · 11 single-bend (L) · 21 U-bar/stirrup · 31 offset/two-bend · 41 U with end hooks · 51 cranked · 99 special.
+   796→
+   797→> ⚠️ Agent must verify descriptions against BS 8666:2020 during WO-W-12 before seeding. Pilot engineer reviews the final table.
+   798→
+   799→### 8.4 Library taxonomy (10 categories)
+   800→
+   801→Earthworks · Concrete · Formwork · Reinforcement · Masonry · Plastering · Painting · Flooring & Tiling · Waterproofing & Insulation · Miscellaneous
+   802→
+   803→### 8.5 Starter items (~150, seeded verbatim from turn 30 APPENDIX_SEED_DATA)
+   804→
+   805→The full 23-item starter table from turn 30 is reproduced in `docs/imported/full-conversation.md` (turn 30, section E) and will be the seed source for WO-W-12. Agent extends to ~150 within the taxonomy per the content rules in turn 30.
+   806→
+   807→---
+   808→
+   809→## 9. Traceability
+   810→
+   811→| Golden Test | Tables touched | Business rules exercised |
+   812→|-------------|-----------------|---------------------------|
+   813→| GT-1 (BoQ totals) | `BoQItem`, `BoQSection`, `BoQDocument`, `Project` | BR-2, BR-3, BR-4 |
+   814→| GT-2 (rate analysis) | `RateAnalysis`, `RateAnalysisLine`, `BoQItem` | BR-8, BR-9, BR-10 |
+   815→| GT-3 (concrete) | `CalculationRecord` (calculatorType="concrete") | (calculator formulas) |
+   816→| GT-4 (formwork) | `CalculationRecord` (calculatorType="formwork") | (calculator formulas) |
+   817→| GT-5 (rebar) | `CalculationRecord` (calculatorType="rebar"), `RebarDiameter` | BR-11, BR-12 |
+   818→| GT-6 (masonry) | `CalculationRecord` (calculatorType="masonry") | (calculator formulas) |
+   819→| GT-7 (plaster) | `CalculationRecord` (calculatorType="plaster") | (calculator formulas) |
+   820→| GT-8 (paint) | `CalculationRecord` (calculatorType="paint") | (calculator formulas) |
+   821→
+   822→> Zod schema ↔ Prisma model naming is mechanical (`src/shared/schemas/boq/boq-item.ts` ↔ `BoQItem` model) — this is how AI sessions find the right schema without guessing. A round-trip test per table (fixture → zod parse → Prisma create → Prisma findUnique → zod parse) verifies they never drift.
+   823→
+   824→---
+   825→
+   826→## 10. v1.1 vs v1.0 Diff Summary
+   827→
+   828→| Area | v1.0 (Electron) | v1.1 (Next.js web) |
+   829→|------|------------------|---------------------|
+   830→| Database count | 2 (app.db + .toproj per project) | 1 (Prisma-managed) |
+   831→| Project portability | One `.toproj` file per project | DB rows; future export-archive feature |
+   832→| Auth | None (single-user desktop) | NextAuth: User, Session, VerificationToken |
+   833→| Per-user settings | `app_settings` single-row table in app.db | `UserSettings` table (one row per user) |
+   834→| Company profile | `company_profile` single-row in app.db | `CompanyProfile` table (one row per user) |
+   835→| Recent projects | `recent_projects` table with file paths | Computed query: `Project WHERE userId=? ORDER BY updatedAt DESC LIMIT 10` |
+   836→| License cache | `license_cache` single-row in app.db | `Subscription` table (per user, Phase 5) |
+   837→| Reference tables | Master in app.db, snapshot copied per project | Master `Unit`/`RebarDiameter`/`ShapeCode` tables + per-project `ProjectUnit`/`ProjectRebarDiameter`/`ProjectShapeCode` snapshots |
+   838→| Library | `library_items` in app.db (global) | `ItemLibrary` table with `userId` discriminator (seed global + user-saved) |
+   839→| Attachments | Gzipped BLOBs inside .toproj | `FileUpload` table (blob on disk/S3 + metadata in DB) |
+   840→| Audit log | (not in v1.0) | `AuditLog` table — new in v1.1 (web accountability) |
+   841→| Snapshot versioning | `<appdata>/snapshots/<project_uuid>/` files | `ProjectSnapshot` table with JSON payload |
+   842→| Conflict detection | SHA-256 of .toproj file | `version: Int` column + optimistic concurrency |
+   843→
+   844→**Phase 1 BoQ tables preserved exactly**: `Project`, `BoQDocument`, `BoQSection`, `BoQItem`, `RateAnalysis`, `RateAnalysisLine`, `CalculationRecord`, `ImportBatch` — same fields, same relationships, same business rules. Only their physical representation changed (SQLite DDL → Prisma schema).
+   845→
+   846→**Phase 2-4 tables reserved additive**: All future tables (Planning, Documents, Payments) are listed in §7 with concrete shapes; Phase 1 build creates none of them, but the schema design proves they fit without modifying any Phase 1 table.
+   847→
+   848→---
+   849→
+   850→## 11. Approval & Next Steps
+   851→
+   852→- ✅ v1.0 ERD approved in turn 20 of GLM chat
+   853→- ✅ v1.1 (this document) adapts v1.0 for web MVP per user's Path C decision
+   854→- ⬜ v1.1 reviewed against `CONSTITUTION_V1.1_WEB.md` §5 (save model matches)
+   855→- ⬜ v1.1 reviewed against `SPEC_PHASE1_BOQ_WEB.md` §7 (entity list matches)
+   856→- ⬜ v1.1 reviewed against `PLATFORM_PORTABILITY.md` §3 (repository interfaces map to these models)
+   857→- ⬜ Prisma schema (`prisma/schema.prisma`) written in WO-W-2 from this document
+   858→
+   859→**End of ERD v1.1 (Web Adaptation).**
+   860→

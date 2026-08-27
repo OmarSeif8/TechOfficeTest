@@ -1,0 +1,1436 @@
+// =============================================================================
+// TechOffice — Prisma Schema (Phase 1 web build, WO-W-1)
+// =============================================================================
+// Source of truth: docs/planning/ERD_V1.1_WEB.md
+// Governing law:   docs/planning/CONSTITUTION_V1.1_WEB.md
+//
+// Global conventions (Constitution v1.1 §5, ERD v1.1 §2):
+//   * Primary keys:        `String @id @default(cuid())` (cuid is time-ordered)
+//   * Audit columns:       `createdAt DateTime @default(now())` + `updatedAt DateTime @updatedAt`
+//   * Soft delete:         `deletedAt DateTime?` on all updatable aggregates
+//   * Optimistic currency: `version Int @default(1)` on BoQDocument, BoQSection,
+//                          BoQItem, Project, RateAnalysis, CalculationRecord,
+//                          ItemLibrary, CompanyProfile, UserSettings, Subscription
+//   * Money & quantities:  `String` storing decimal strings — application layer
+//                          uses decimal.js; SQLite has no native decimal type
+//   * Bilingual content:   `<field>En String` + `<field>Ar String?` (never concatenated)
+//   * Audit logging:       every mutation writes a row to AuditLog (append-only)
+//
+// Phase 1 (BoQ module) tables are complete and enforced.
+// Phase 2-4 tables are declared in §8 below as RESERVED additive (declared,
+// not enforced in Phase 1) so the schema never needs to be rewritten.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+//   Prisma stores enums as TEXT in SQLite; the application layer (zod) is the
+//   authoritative validator per ERD v1.1 §2.
+// =============================================================================
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum Locale {
+  EN
+  AR
+}
+
+enum Theme {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
+enum LaborMode {
+  CONSUMPTION
+  CREW
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum BoQDocumentStatus {
+  DRAFT
+  FINALIZED
+  ARCHIVED
+}
+
+enum BoQItemType {
+  RATE_BASED
+  LUMP_SUM
+  PROVISIONAL_SUM
+  DAYWORK
+  UNIT_ONLY
+}
+
+enum RateAnalysisLineType {
+  MATERIAL
+  LABOR
+  EQUIPMENT
+  SUBCONTRACT
+}
+
+enum CalculatorType {
+  CONCRETE
+  FORMWORK
+  REBAR
+  MASONRY
+  PLASTER
+  PAINT
+}
+
+enum ImportBatchStatus {
+  PENDING
+  VALIDATED
+  COMMITTED
+  FAILED
+}
+
+enum ItemLibraryScope {
+  APP_GLOBAL
+  USER_PRIVATE
+}
+
+// Phase 2 — Scheduling (CPM engine per SPEC_PHASE2_WEB.md §5)
+enum RelationshipType {
+  FS // Finish-to-Start
+  SS // Start-to-Start
+  FF // Finish-to-Finish
+  SF // Start-to-Finish
+}
+
+enum ScheduleRunStatus {
+  SUCCESS
+  CYCLE_DETECTED
+  VALIDATION_ERROR
+}
+
+// Phase 3A — Document Control (per SPEC_PHASE3_WEB.md §5)
+//   Stored as TEXT in SQLite; the application layer (zod) is the authoritative
+//   validator per ERD v1.1 §2 (mirrors the existing pattern).
+enum Discipline {
+  ARC // Architectural
+  STR // Structural
+  CIV // Civil
+  MEC // Mechanical
+  ELE // Electrical
+  PLB // Plumbing
+  FIR // Fire-fighting
+  LND // Landscape
+}
+
+enum DrawingStatus {
+  PRELIMINARY
+  ISSUED
+  APPROVED_FOR_CONSTRUCTION
+  SUPERSEDED // terminal — newer revision exists
+  OBSOLETE // terminal — drawing withdrawn
+}
+
+enum SubmittalStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  APPROVED_WITH_COMMENTS
+  REJECTED
+  REVISE_RESUBMIT
+}
+
+enum SubmittalType {
+  MATERIAL
+  TECHNICAL
+}
+
+enum RfiStatus {
+  OPEN
+  ANSWERED
+  CLOSED
+  CANCELLED // terminal
+}
+
+enum CorrespondenceDirection {
+  INCOMING
+  OUTGOING
+}
+
+enum CorrespondenceType {
+  LETTER
+  MEMO
+  TRANSMITTAL
+  EMAIL
+  OTHER
+}
+
+enum DrawingRevisionEventType {
+  REVISION_ADDED
+  STATUS_CHANGED
+  SUPERSEDED
+}
+
+// =============================================================================
+// SECTION 1 — AUTH & USER (Phase 1 web)
+//   NextAuth (Auth.js v4) schema + TechOffice extensions.
+// =============================================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime? // NextAuth email-verify flow
+  passwordHash  String?   // null if OAuth-only
+  name          String?
+  image         String?   // NextAuth profile image URL
+  role          UserRole  @default(USER)
+  locale        Locale    @default(EN)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  sessions           Session[]
+  accounts           Account[]
+  userSettings       UserSettings?
+  companyProfile     CompanyProfile?
+  subscription       Subscription?
+  projects           Project[] // owned projects (Project.ownerId)
+  fileUploads        FileUpload[]
+  auditLogs          AuditLog[]
+  libraryItems       ItemLibrary[] // privately-saved library items
+  createdSnapshots   ProjectSnapshot[]
+  // Phase 2 — Scheduling: a user creates ScheduleRun rows when they re-run the CPM engine.
+  scheduleRuns       ScheduleRun[]
+  // Phase 3A — Document Control: createdBy back-references for revision/event rows
+  drawingRevisions          DrawingRevision[]
+  drawingRevisionEvents     DrawingRevisionEvent[]
+  submittalEvents           SubmittalEvent[]
+  rfiEvents                 RfiEvent[]
+
+  @@index([email])
+  @@index([deletedAt])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// NextAuth OAuth account — declared now so future OAuth providers require no
+// schema migration. Nullability mirrors the NextAuth Prisma adapter contract.
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String // "oauth" | "oidc" | "email"
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@unique([provider, providerAccountId])
+}
+
+// =============================================================================
+// SECTION 2 — USER-LEVEL ENTITIES (Phase 1 web)
+//   One-row-per-user settings & company profile; subscription for Phase 5 tier.
+// =============================================================================
+
+model UserSettings {
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  theme              Theme     @default(DARK)
+  locale             Locale    @default(EN)
+  defaultLaborMode   LaborMode @default(CONSUMPTION)
+  defaultOverheadPct String    @default("10") // decimal string — decimal.js on app side
+  defaultProfitPct   String    @default("15") // decimal string — decimal.js on app side
+  autosaveIntervalMs Int       @default(2000)
+  version            Int       @default(1) // optimistic concurrency
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CompanyProfile {
+  id                String      @id @default(cuid())
+  userId            String      @unique
+  nameEn            String
+  nameAr            String?
+  addressEn         String?
+  addressAr         String?
+  phone             String?
+  email             String?
+  taxId             String?
+  logoFileUploadId  String?
+  version           Int         @default(1) // optimistic concurrency
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logoFile FileUpload? @relation("CompanyProfileLogo", fields: [logoFileUploadId], references: [id], onDelete: SetNull)
+
+  @@index([logoFileUploadId])
+}
+
+model Subscription {
+  id                 String              @id @default(cuid())
+  userId             String              @unique
+  status             SubscriptionStatus  @default(TRIAL)
+  plan               SubscriptionPlan    @default(FREE)
+  stripeCustomerId   String?             // Phase 5: merchant of record
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  canceledAt         DateTime?
+  version            Int                 @default(1) // optimistic concurrency
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// =============================================================================
+// SECTION 3 — FILE STORAGE & AUDIT LOG
+// =============================================================================
+
+// FileUpload: metadata only — the actual blob lives on disk (dev) or in
+// S3-compatible storage (prod). SHA-256 dedupes + verifies integrity.
+model FileUpload {
+  id            String   @id @default(cuid())
+  uploaderUserId String
+  filename      String   // storage-side filename (e.g. "{sha256}.bin")
+  originalName  String   // user-facing name as uploaded
+  mimeType      String   // validated against allowlist (BR-WEB-3)
+  sizeBytes     Int      // checked against per-type limit (BR-WEB-3)
+  storagePath   String   // path/key in blob storage
+  sha256        String
+  createdAt     DateTime @default(now())
+  deletedAt     DateTime?
+
+  user             User              @relation(fields: [uploaderUserId], references: [id], onDelete: Cascade)
+  companyLogos     CompanyProfile[]  @relation("CompanyProfileLogo")
+  importBatches    ImportBatch[]     // reverse relation — ImportBatch.fileUploadId
+  drawingRevisions DrawingRevision[] // Phase 3A — drawing revision file attachments
+
+  @@index([uploaderUserId, createdAt])
+  @@index([sha256])
+}
+
+// AuditLog: append-only, no updates, no deletes (enforced by application layer).
+// Every mutation in the system writes a row here per BR-WEB-6.
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?  // null for system actions
+  action      String   // "create" | "update" | "delete" | "restore" | "import" | "export"
+  entityType  String   // "Project" | "BoQDocument" | "BoQItem" | ...
+  entityId    String
+  beforeJson  String?  // JSON snapshot of row before mutation
+  afterJson   String?  // JSON snapshot of row after mutation
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId, createdAt])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+// =============================================================================
+// SECTION 4 — MASTER REFERENCE DATA (app-level, shared by all users)
+//   At project creation, these are copied into project-scoped snapshot tables
+//   (ProjectUnit, ProjectRebarDiameter, ProjectShapeCode) so projects are
+//   immune to later edits of the master. Cross-table FKs to the master from
+//   project-scoped tables are forbidden; project rows reference snapshots only.
+// =============================================================================
+
+model Unit {
+  id               String   @id @default(cuid())
+  code             String   @unique // "m" | "m2" | "m3" | "ton" | "kg" | "no" | "lot" | "hr" | "sum"
+  nameEn           String
+  nameAr           String?
+  defaultPrecision Int      @default(2) // decimal places per BR-6
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  aliases           UnitAlias[]
+  projectSnapshots  ProjectUnit[]
+  libraryItems      ItemLibrary[]
+
+  @@index([code])
+}
+
+model UnitAlias {
+  id        String   @id @default(cuid())
+  unitId    String
+  alias     String   @unique // case-insensitive match in app layer (e.g. "m²" → "m2")
+  createdAt DateTime @default(now())
+
+  unit Unit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@index([unitId])
+  @@index([alias])
+}
+
+model RebarDiameter {
+  id            String   @id @default(cuid())
+  diameterMm    Int      @unique // 6, 8, 10, ..., 40 — BR-11
+  weightKgPerM  String   // kg/m as decimal string (12mm → 0.888, per BR-11)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  projectSnapshots ProjectRebarDiameter[]
+
+  @@index([diameterMm])
+}
+
+model ShapeCode {
+  id              String   @id @default(cuid())
+  code            String   @unique // "00" | "01" | "11" | "21" | ... (BS 8666 subset)
+  nameEn          String
+  nameAr          String?
+  illustrationRef String?  // Phase 1: text-only — future: SVG/PNG reference
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  projectSnapshots ProjectShapeCode[]
+
+  @@index([code])
+}
+
+// =============================================================================
+// SECTION 5 — PROJECT-SCOPED TABLES
+// =============================================================================
+
+model Project {
+  id          String   @id @default(cuid())
+  ownerId     String   // → User.id
+  nameEn      String
+  nameAr      String?
+  clientEn    String?
+  clientAr    String?
+  locationEn  String?
+  locationAr  String?
+  contractNo  String?
+  currency    String   @default("USD") // ISO 4217
+  version     Int      @default(1) // optimistic concurrency
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  owner                User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  boqDocuments         BoQDocument[]
+  snapshots            ProjectSnapshot[]
+  projectUnits         ProjectUnit[]
+  projectRebarDiameters ProjectRebarDiameter[]
+  projectShapeCodes    ProjectShapeCode[]
+  importBatches        ImportBatch[]
+  rateAnalyses         RateAnalysis[]
+  calculationRecords   CalculationRecord[]
+  boqSections          BoQSection[] // denormalised project FK for fast queries
+  boqItems             BoQItem[]    // denormalised project FK for fast queries
+  // Phase 2 — Scheduling
+  projectCalendar      ProjectCalendar?
+  wbsNodes             WbsNode[]
+  activities           Activity[]
+  activityRelationships ActivityRelationship[]
+  scheduleRuns         ScheduleRun[]
+  // Phase 3A — Document Control
+  drawings             Drawing[]
+  submittals           Submittal[]
+  rfis                 Rfi[]
+  correspondences      Correspondence[]
+  // Phase 4 — Payments, Cost-Schedule, Reports
+  paymentApplications  PaymentApplication[]
+  variations           Variation[]
+  progressUpdates      ProgressUpdate[]
+  dailyReports         DailyReport[]
+
+  @@index([ownerId, deletedAt])
+  @@index([updatedAt])
+}
+
+// Frozen snapshot of Unit at project creation — project rows always reference
+// this snapshot, never the master Unit, so projects are portable across users.
+model ProjectUnit {
+  id               String   @id @default(cuid())
+  projectId        String
+  unitId           String   // provenance — master Unit this was copied from
+  code             String
+  nameEn           String
+  nameAr           String?
+  defaultPrecision Int
+  createdAt        DateTime @default(now())
+
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceUnit    Unit          @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  boqItems      BoQItem[]
+  rateAnalysisLines RateAnalysisLine[]
+  calculationRecords CalculationRecord[]
+
+  @@unique([projectId, code])
+  @@index([projectId])
+  @@index([unitId])
+}
+
+model ProjectRebarDiameter {
+  id           String   @id @default(cuid())
+  projectId    String
+  rebarDiameterId String // provenance — master RebarDiameter this was copied from
+  diameterMm   Int
+  weightKgPerM String   // kg/m as decimal string
+  createdAt    DateTime @default(now())
+
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceDiameter  RebarDiameter    @relation(fields: [rebarDiameterId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, diameterMm])
+  @@index([projectId])
+  @@index([rebarDiameterId])
+}
+
+model ProjectShapeCode {
+  id              String   @id @default(cuid())
+  projectId       String
+  shapeCodeId     String   // provenance — master ShapeCode this was copied from
+  code            String
+  nameEn          String
+  nameAr          String?
+  illustrationRef String?
+  createdAt       DateTime @default(now())
+
+  project       Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceShape   ShapeCode  @relation(fields: [shapeCodeId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, code])
+  @@index([projectId])
+  @@index([shapeCodeId])
+}
+
+// ProjectSnapshot: immutable serialized state of an entire project, created on
+// interval / before imports / before destructive ops. Restore = copy payload
+// back into project rows in a transaction.
+model ProjectSnapshot {
+  id              String   @id @default(cuid())
+  projectId       String
+  name            String
+  description     String?
+  dataJson        String   // JSON of all project rows at snapshot time
+  createdByUserId String?  // → User.id; nullable so snapshots survive user deletion (SetNull)
+  createdAt       DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([createdByUserId])
+}
+
+// =============================================================================
+// SECTION 6 — BoQ MODULE (Phase 1 core)
+//   BoQDocument → BoQSection → BoQItem, with optional RateAnalysis (1:1) and
+//   CalculationRecord (1:1, orphan-safe). ImportBatch tracks Excel imports.
+// =============================================================================
+
+model BoQDocument {
+  id         String             @id @default(cuid())
+  projectId  String
+  nameEn     String
+  nameAr     String?
+  status     BoQDocumentStatus  @default(DRAFT) // DRAFT | FINALIZED | ARCHIVED
+  version    Int                @default(1) // optimistic concurrency
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  deletedAt  DateTime?
+
+  project  Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sections BoQSection[]
+  items    BoQItem[] // denormalised documentId for fast document-level queries
+  imports  ImportBatch[]
+
+  @@index([projectId, deletedAt])
+  @@index([status])
+}
+
+model BoQSection {
+  id         String   @id @default(cuid())
+  documentId String
+  projectId  String   // denormalised for fast project-level queries
+  code       String
+  titleEn    String
+  titleAr    String?
+  sortOrder  Int      @default(0)
+  version    Int      @default(1) // optimistic concurrency
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+
+  document BoQDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  project  Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items    BoQItem[]
+
+  @@index([documentId, deletedAt])
+  @@index([projectId, deletedAt])
+  @@index([sortOrder])
+}
+
+model BoQItem {
+  id                  String       @id @default(cuid())
+  sectionId           String
+  documentId          String       // denormalised for fast document-level queries
+  projectId           String       // denormalised for fast project-level queries
+  code                String?      // BR-7 numbering
+  descriptionEn       String
+  descriptionAr       String?
+  unitId              String?      // → ProjectUnit.id; null for LUMP_SUM/PROVISIONAL_SUM
+  quantity            String       @default("0") // decimal string — decimal.js on app side
+  rate                String       @default("0") // decimal string — decimal.js on app side
+  amount              String       @default("0") // decimal string — computed = qty × rate (app-enforced)
+  itemType            BoQItemType  @default(RATE_BASED)
+  libraryItemId       String?     // provenance — ItemLibrary.id this was imported from
+  sortOrder           Int          @default(0)
+  version             Int          @default(1) // optimistic concurrency
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  deletedAt           DateTime?
+
+  section            BoQSection         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  document           BoQDocument        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  project            Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  unit               ProjectUnit?       @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  libraryItem        ItemLibrary?       @relation(fields: [libraryItemId], references: [id], onDelete: SetNull)
+  rateAnalysis       RateAnalysis?
+  calculationRecord  CalculationRecord?
+
+  @@index([sectionId, deletedAt])
+  @@index([documentId, deletedAt])
+  @@index([projectId, deletedAt])
+  @@index([libraryItemId])
+  @@index([sortOrder])
+}
+
+// RateAnalysis: optionally 1:1 with BoQItem (FK on this side, @unique).
+// Nullable per INTERFACE (RateAnalysisCreateInput allows boqItemId?: string | null)
+// so an analysis can be drafted before being applied to an item.
+// Computed totalRate is the input rate for the linked BoQItem per BR-8..BR-10.
+model RateAnalysis {
+  id           String    @id @default(cuid())
+  boqItemId    String?   @unique // 1:1 with BoQItem per spec S5; nullable (draft analyses)
+  projectId    String
+  totalRate    String    // decimal string — computed from lines × (1+overhead) × (1+profit)
+  overheadPct  String    // decimal string — overhead % applied
+  profitPct    String    // decimal string — profit % applied
+  laborMode    LaborMode @default(CONSUMPTION)
+  version      Int       @default(1) // optimistic concurrency
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  boqItem BoQItem?          @relation(fields: [boqItemId], references: [id], onDelete: Cascade)
+  project Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  lines   RateAnalysisLine[]
+
+  @@index([projectId])
+  @@index([boqItemId])
+}
+
+model RateAnalysisLine {
+  id            String                @id @default(cuid())
+  rateAnalysisId String
+  lineType      RateAnalysisLineType  // MATERIAL | LABOR | EQUIPMENT | SUBCONTRACT
+  descriptionEn String
+  descriptionAr String?
+  quantity      String                // decimal string — consumption qty
+  unitId        String?               // → ProjectUnit.id; nullable for crew-mode labor
+  unitPrice     String                // decimal string — unit cost
+  wastePct      String                @default("0") // decimal string — materials only (BR-8)
+  total         String                // decimal string — computed = qty × unitPrice × (1+waste)
+  sortOrder     Int                   @default(0)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  rateAnalysis RateAnalysis @relation(fields: [rateAnalysisId], references: [id], onDelete: Cascade)
+  unit         ProjectUnit?  @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  @@index([rateAnalysisId, sortOrder])
+  @@index([unitId])
+}
+
+// CalculationRecord: 1:1 with BoQItem (FK on this side, @unique, orphan-safe
+// per F5 — can exist unlinked). Stores inputs/result of a calculator (concrete,
+// formwork, rebar, masonry, plaster, paint) for audit trail.
+model CalculationRecord {
+  id              String         @id @default(cuid())
+  projectId       String
+  calculatorType  CalculatorType // CONCRETE | FORMWORK | REBAR | MASONRY | PLASTER | PAINT
+  inputsJson     String         // JSON: zod schema per calculator type
+  resultJson     String         // JSON: row-by-row breakdown
+  resultQuantity String         // decimal string — final computed quantity
+  resultUnitId   String?        // → ProjectUnit.id
+  linkedBoqItemId String?  @unique // → BoQItem.id; null = orphan (calculation not yet applied)
+  linkedAt       DateTime?       // when linked to a BoQItem (BR-13: applying never silently overwrites)
+  version        Int             @default(1) // optimistic concurrency
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  resultUnit     ProjectUnit?  @relation(fields: [resultUnitId], references: [id], onDelete: SetNull)
+  linkedBoqItem  BoQItem?      @relation(fields: [linkedBoqItemId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([calculatorType])
+  @@index([linkedBoqItemId])
+  @@index([resultUnitId])
+}
+
+// ImportBatch: tracks Excel imports. Status machine: PENDING → VALIDATED →
+// COMMITTED (or → FAILED). Validation/mapping JSON stored for re-runs.
+model ImportBatch {
+  id             String             @id @default(cuid())
+  projectId      String
+  documentId     String?
+  fileName       String
+  fileUploadId   String?
+  totalRows      Int                @default(0)
+  importedRows   Int                @default(0)
+  skippedRows    Int                @default(0)
+  status         ImportBatchStatus  @default(PENDING)
+  mappingJson    String?            // JSON: column mapping
+  validationJson String?            // JSON: validation errors per row
+  createdAt      DateTime           @default(now())
+  committedAt    DateTime?
+
+  project  Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  document BoQDocument?  @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  file     FileUpload?   @relation(fields: [fileUploadId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([documentId])
+  @@index([fileUploadId])
+  @@index([status])
+}
+
+// =============================================================================
+// SECTION 7 — ITEM LIBRARY (F6, app-level, app-global + user-private)
+//   Library items are templates — when imported into a project they become
+//   independent BoQItem rows (libraryItem FK tracks provenance only).
+// =============================================================================
+
+model LibraryCategory {
+  id        String   @id @default(cuid())
+  parentId  String?  // self-tree — null = root
+  nameEn    String
+  nameAr    String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent   LibraryCategory?  @relation("LibraryCategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children LibraryCategory[] @relation("LibraryCategoryTree")
+  items    ItemLibrary[]
+
+  @@index([parentId])
+  @@index([sortOrder])
+}
+
+model ItemLibrary {
+  id             String           @id @default(cuid())
+  categoryId     String?
+  code           String?          // optional catalog code
+  descriptionEn  String
+  descriptionAr  String?
+  unitId         String?          // → Unit.id (master reference; library is app-level)
+  defaultSpecsEn String?
+  defaultSpecsAr String?
+  scope          ItemLibraryScope @default(APP_GLOBAL) // APP_GLOBAL | USER_PRIVATE
+  ownerId        String?          // → User.id; null if APP_GLOBAL
+  version        Int              @default(1) // optimistic concurrency
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+
+  category LibraryCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  unit     Unit?            @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  owner    User?            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  boqItems BoQItem[]
+
+  @@index([categoryId])
+  @@index([unitId])
+  @@index([ownerId, deletedAt])
+  @@index([scope, deletedAt])
+  @@index([code])
+}
+
+// =============================================================================
+// SECTION 8 — SCHEDULING (Phase 2 — CPM engine per SPEC_PHASE2_WEB.md §5)
+//   Active in Phase 2. These tables were declared as RESERVED in Phase 1;
+//   they have now been promoted to full definitions with relations, indexes,
+//   and uniqueness constraints per the web-adapted Phase 2 spec.
+//
+//   Conventions carried over from Phase 1:
+//     * Primary keys:  String @id @default(cuid())
+//     * Audit columns: createdAt + updatedAt (where applicable)
+//     * Soft delete:   deletedAt DateTime? on WbsNode and Activity
+//     * Bilingual:     nameEn + nameAr? on WbsNode / Activity
+//     * Date columns:  String (ISO yyyy-MM-dd) per BR-P1 — no JS Date objects
+//     * Optimistic version: Int @default(1) on ProjectCalendar + Activity
+//
+//   ScheduleRun is IMMUTABLE per BR-WEB-P3: once created, it is never updated.
+//   The "current" schedule for a project = the latest ScheduleRun by createdAt.
+// =============================================================================
+
+// ProjectCalendar: weekday mask + version. One row per project (1:1 enforced
+// at the application layer — the schema permits multiple to allow history, but
+// the repository's upsert ensures a single live row per project).
+// Default mask: Sun–Thu working, Fri–Sat off (BR-P9 — Egyptian/Gulf default).
+model ProjectCalendar {
+  id              String   @id @default(cuid())
+  projectId       String   @unique // one live calendar per project
+  mondayWorking    Boolean  @default(true)
+  tuesdayWorking   Boolean  @default(true)
+  wednesdayWorking Boolean  @default(true)
+  thursdayWorking  Boolean  @default(true)
+  fridayWorking    Boolean  @default(false) // BR-P9 — Egyptian/Gulf default
+  saturdayWorking  Boolean  @default(false)
+  sundayWorking    Boolean  @default(true)
+  version         Int      @default(1) // optimistic concurrency
+  createdAt       DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  exceptions CalendarException[]
+
+  @@index([projectId])
+}
+
+// CalendarException: a single-date override of the weekday mask (BR-P5).
+model CalendarException {
+  id         String  @id @default(cuid())
+  calendarId String
+  date       String  // ISO yyyy-MM-dd per BR-P1
+  isWorking  Boolean
+  nameEn     String? // e.g. "New Year's Day"
+  nameAr     String?
+  createdAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  calendar ProjectCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@unique([calendarId, date])
+  @@index([calendarId])
+  @@index([date])
+}
+
+// WbsNode: work breakdown structure tree for a project. Self-referencing
+// parentId for the tree; soft-deleted via deletedAt.
+model WbsNode {
+  id        String   @id @default(cuid())
+  projectId String
+  parentId  String?
+  code      String
+  nameEn    String
+  nameAr    String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  project  Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent   WbsNode?   @relation("WbsTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children WbsNode[]  @relation("WbsTree")
+  activities Activity[]
+
+  @@index([projectId, deletedAt])
+  @@index([parentId])
+  @@index([sortOrder])
+}
+
+// Activity: a single schedulable task in the CPM engine. Optional wbsNodeId
+// for organizational grouping. duration is in working days (BR-P3), ≥ 0;
+// milestones have duration = 0 + isMilestone = true.
+model Activity {
+  id          String   @id @default(cuid())
+  projectId   String
+  wbsNodeId   String?
+  code        String
+  nameEn      String
+  nameAr      String?
+  duration    Int      @default(0) // working days, ≥ 0 per BR-P3
+  isMilestone Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  version     Int      @default(1) // optimistic concurrency
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  wbsNode  WbsNode? @relation(fields: [wbsNodeId], references: [id], onDelete: SetNull)
+  // ActivityRelationship — both sides point back to this Activity. Two
+  // distinct relation fields are required because Prisma needs a unique name
+  // per foreign-key relation on the same model.
+  predecessorRelationships ActivityRelationship[] @relation("Successor")
+  successorRelationships   ActivityRelationship[] @relation("Predecessor")
+  scheduleActivities       ScheduleActivity[]
+
+  @@index([projectId, deletedAt])
+  @@index([wbsNodeId])
+  @@index([sortOrder])
+}
+
+// ActivityRelationship: predecessor↔successor dependency with lag (FS/SS/FF/SF).
+// Replaces the Phase 1 RESERVED ScheduleLink table. Unique on the triple
+// [predecessorId, successorId, type] — multiple relationships between the same
+// pair are allowed only if the type differs (BR-P13: parallel bounds apply).
+model ActivityRelationship {
+  id            String          @id @default(cuid())
+  projectId     String
+  predecessorId String
+  successorId   String
+  type          RelationshipType
+  lag           Int             @default(0) // working days, any sign (BR-P4)
+  createdAt     DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  predecessor Activity @relation("Predecessor", fields: [predecessorId], references: [id], onDelete: Cascade)
+  successor   Activity @relation("Successor", fields: [successorId], references: [id], onDelete: Cascade)
+
+  @@unique([predecessorId, successorId, type])
+  @@index([projectId])
+  @@index([predecessorId])
+  @@index([successorId])
+}
+
+// ScheduleRun: an immutable snapshot of a CPM engine run (BR-WEB-P1, BR-WEB-P3).
+// Created by POST /api/projects/[id]/scheduling/run in a single $transaction
+// together with its ScheduleActivity rows. Never updated; the latest row by
+// createdAt is the "current" schedule.
+model ScheduleRun {
+  id                String            @id @default(cuid())
+  projectId         String
+  projectStart      String            // ISO yyyy-MM-dd (BR-P1)
+  status            ScheduleRunStatus
+  projectFinishDate String?           // null if status != SUCCESS
+  criticalPathJson  String?           // JSON array of activity IDs
+  warningsJson      String?           // JSON array of {code, activityId?, message}
+  errorJson         String?           // JSON of cycle/validation errors
+  runById           String            // → User.id
+  createdAt         DateTime          @default(now())
+
+  project Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  runBy   User                @relation(fields: [runById], references: [id], onDelete: Cascade)
+  activities ScheduleActivity[]
+
+  @@index([projectId, createdAt])
+  @@index([runById])
+}
+
+// ScheduleActivity: per-run cached CPM dates for an activity (engine output).
+// One row per (scheduleRun, activity). Unique on [scheduleRunId, activityId].
+model ScheduleActivity {
+  id              String  @id @default(cuid())
+  scheduleRunId   String
+  activityId      String
+  es              String  // ISO yyyy-MM-dd — early start
+  ef              String  // ISO yyyy-MM-dd — early finish
+  ls              String  // ISO yyyy-MM-dd — late start
+  lf              String  // ISO yyyy-MM-dd — late finish
+  totalFloatDays  Int     // working days (BR-P12)
+  isCritical      Boolean
+  createdAt       DateTime @default(now())
+
+  scheduleRun ScheduleRun @relation(fields: [scheduleRunId], references: [id], onDelete: Cascade)
+  activity    Activity    @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleRunId, activityId])
+  @@index([scheduleRunId])
+  @@index([activityId])
+  @@index([isCritical])
+}
+
+// -----------------------------------------------------------------------------
+// SECTION 9 — DOCUMENT CONTROL (Phase 3A — promoted from RESERVED)
+//   These tables were declared as minimal RESERVED stubs in Phase 1; they have
+//   now been promoted to full definitions with relations, indexes, soft-delete,
+//   version, and Prisma enums per SPEC_PHASE3_WEB.md §5.
+//
+//   Conventions carried over from Phase 1:
+//     * Primary keys:  String @id @default(cuid())
+//     * Audit columns: createdAt + updatedAt (where applicable)
+//     * Soft delete:   deletedAt DateTime? on Drawing/Submittal/Rfi/Correspondence
+//     * Bilingual:     <field>En + <field>Ar? on Submittal/Correspondence/etc.
+//     * Date columns:  String (ISO yyyy-MM-dd) per BR-DC1 — no JS Date objects
+//     * Optimistic version: Int @default(1) on Drawing/Submittal/Rfi/Correspondence
+//
+//   Per BR-DC2: ref strings (SUB-###, RFI-###, IN-###, OUT-###) are unique per
+//   project. Drawing codes are engineer-assigned, unique per project.
+//
+//   Per BR-DC3: DrawingRevision requires a fileUploadId (attached file).
+//   Per BR-DC8: status changes are append-only event rows — never edited.
+// =============================================================================
+
+// Drawing: a drawing register entry (discipline, current revision, etc.).
+model Drawing {
+  id                String   @id @default(cuid())
+  projectId         String
+  code              String   // engineer-assigned, unique per project (BR-DC2)
+  titleEn           String
+  titleAr           String?
+  discipline        Discipline
+  currentRevisionId String? // → DrawingRevision.id (managed by the API route)
+  version           Int      @default(1) // optimistic concurrency
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  deletedAt         DateTime?
+
+  project   Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  revisions DrawingRevision[]
+  events    DrawingRevisionEvent[]
+
+  @@unique([projectId, code])
+  @@index([projectId, deletedAt])
+  @@index([discipline])
+}
+
+// DrawingRevision: a specific revision of a drawing. Per BR-DC3, requires an
+// attached file (fileUploadId is nullable in the schema for legacy/seeded data,
+// but the API route ENFORCES non-null on new revisions).
+model DrawingRevision {
+  id              String   @id @default(cuid())
+  drawingId       String
+  revision        String   // "A", "B", ..., "Z", "AA", ... (BR-DC3 bijective base-26)
+  status          DrawingStatus
+  revisionDate    String   // ISO yyyy-MM-dd (BR-DC1)
+  fileUploadId    String?  // → FileUpload.id (BR-DC3 — required on new revisions)
+  notes           String?
+  createdByUserId String   // → User.id
+  createdAt       DateTime @default(now())
+
+  drawing    Drawing    @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  fileUpload FileUpload? @relation(fields: [fileUploadId], references: [id], onDelete: SetNull)
+  createdBy  User       @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  events     DrawingRevisionEvent[]
+
+  @@unique([drawingId, revision])
+  @@index([drawingId])
+  @@index([status])
+  @@index([fileUploadId])
+}
+
+// DrawingRevisionEvent: append-only log of revision lifecycle (BR-DC8).
+// Never edited or deleted — the API routes only INSERT into this table.
+model DrawingRevisionEvent {
+  id              String   @id @default(cuid())
+  drawingId       String
+  revisionId      String
+  eventType       DrawingRevisionEventType
+  fromStatus      DrawingStatus?
+  toStatus        DrawingStatus
+  note            String?
+  eventDate       String   // ISO yyyy-MM-dd (BR-DC1)
+  createdByUserId String   // → User.id
+  createdAt       DateTime @default(now())
+
+  drawing   Drawing          @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  revision DrawingRevision   @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  createdBy User             @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([drawingId, eventDate])
+  @@index([revisionId])
+}
+
+// Submittal: shop-drawing / material submittal register entry.
+model Submittal {
+  id               String   @id @default(cuid())
+  projectId        String
+  ref              String   // "SUB-001" (BR-DC2)
+  subjectEn        String
+  subjectAr        String?
+  type             SubmittalType
+  discipline       Discipline
+  submittedDate    String?  // ISO yyyy-MM-dd (BR-DC1)
+  reviewPeriodDays Int      @default(14) // calendar days (BR-DC6)
+  resubmissionNo   Int      @default(0) // 0 = first submission
+  status           SubmittalStatus @default(DRAFT)
+  version          Int      @default(1) // optimistic concurrency
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+
+  project Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  events  SubmittalEvent[]
+
+  @@unique([projectId, ref])
+  @@index([projectId, deletedAt])
+  @@index([status])
+  @@index([discipline])
+}
+
+// SubmittalEvent: append-only workflow log (BR-DC8).
+model SubmittalEvent {
+  id              String   @id @default(cuid())
+  submittalId     String
+  fromStatus      SubmittalStatus?
+  toStatus        SubmittalStatus
+  note            String?
+  eventDate       String   // ISO yyyy-MM-dd (BR-DC1)
+  createdByUserId String   // → User.id
+  createdAt       DateTime @default(now())
+
+  submittal Submittal @relation(fields: [submittalId], references: [id], onDelete: Cascade)
+  createdBy User      @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([submittalId, eventDate])
+}
+
+// Rfi: Request for Information log entry.
+model Rfi {
+  id               String   @id @default(cuid())
+  projectId        String
+  ref              String   // "RFI-001" (BR-DC2)
+  questionEn       String
+  questionAr       String?
+  linkedDrawingId  String?  // optional FK to Drawing.id
+  sentDate         String?  // ISO yyyy-MM-dd (BR-DC1)
+  reviewPeriodDays Int      @default(7) // calendar days (BR-DC6)
+  answerEn         String?
+  answerAr         String?
+  answerDate       String?  // ISO yyyy-MM-dd (BR-DC1)
+  status           RfiStatus @default(OPEN)
+  version          Int      @default(1) // optimistic concurrency
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  events  RfiEvent[]
+  // No Prisma relation on linkedDrawingId — it is intentionally a loose FK
+  // (drawings can be deleted independently; the RFI keeps the historical link).
+  // A composite check is enforced by the API route on RFI create/update.
+
+  @@unique([projectId, ref])
+  @@index([projectId, deletedAt])
+  @@index([status])
+}
+
+// RfiEvent: append-only workflow log (BR-DC8).
+model RfiEvent {
+  id              String   @id @default(cuid())
+  rfiId           String
+  fromStatus      RfiStatus?
+  toStatus        RfiStatus
+  note            String?
+  eventDate       String   // ISO yyyy-MM-dd (BR-DC1)
+  createdByUserId String   // → User.id
+  createdAt       DateTime @default(now())
+
+  rfi      Rfi  @relation(fields: [rfiId], references: [id], onDelete: Cascade)
+  createdBy User @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([rfiId, eventDate])
+}
+
+// Correspondence: incoming/outgoing correspondence log entry (letters, memos,
+// transmittals, emails, etc.). Per BR-DC10, a Correspondence row with
+// type=TRANSMITTAL has child TransmittalLine rows (managed separately).
+// (Replaces the Phase 1 RESERVED Transmittal model — a TRANSMITTAL is now a
+// Correspondence row + child lines, not a separate top-level table.)
+model Correspondence {
+  id         String   @id @default(cuid())
+  projectId  String
+  ref        String   // "IN-001" / "OUT-001" (BR-DC2)
+  direction  CorrespondenceDirection
+  type       CorrespondenceType
+  date       String   // ISO yyyy-MM-dd (BR-DC1)
+  subjectEn  String
+  subjectAr  String?
+  fromParty  String
+  toParty    String
+  bodyEn     String?
+  bodyAr     String?
+  version    Int      @default(1) // optimistic concurrency
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+
+  project        Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  transmittalLines TransmittalLine[] // only populated when type=TRANSMITTAL
+
+  @@unique([projectId, ref])
+  @@index([projectId, deletedAt])
+  @@index([direction])
+  @@index([type])
+}
+
+// TransmittalLine: one document row within a transmittal (BR-DC10).
+// The parent transmittal is a Correspondence row with type=TRANSMITTAL.
+// `copies` is a non-negative integer; the total appears on the transmittal
+// form footer (computed via @domain/doccontrol/transmittal calculateTotalCopies).
+model TransmittalLine {
+  id             String   @id @default(cuid())
+  transmittalId  String   // FK to Correspondence.id where type=TRANSMITTAL
+  docRef         String
+  descriptionEn  String
+  descriptionAr  String?
+  copies         Int      @default(1)
+  sortOrder      Int      @default(0)
+
+  transmittal Correspondence @relation(fields: [transmittalId], references: [id], onDelete: Cascade)
+
+  @@index([transmittalId, sortOrder])
+}
+
+// -----------------------------------------------------------------------------
+// SECTION 10 — RESERVED — Phase 4 (Payments & cost-schedule integration)
+//   Declared as minimal stubs. Will be promoted to full definitions when
+//   Phase 4 lands.
+// -----------------------------------------------------------------------------
+
+// PaymentApplication: interim payment certificate (IPC) per period.
+// Per SPEC_PHASE4_WEB.md §4 (Phase 4 — the strategic differentiator).
+model PaymentApplication {
+  id                 String   @id @default(cuid())
+  projectId          String
+  ipcNo              Int
+  periodStart        String   // ISO yyyy-MM-dd
+  periodEnd          String   // ISO yyyy-MM-dd
+  status             String   @default("DRAFT") // DRAFT | SUBMITTED | CERTIFIED
+  contractValue      String   @default("0") // decimal string
+  retentionPercent   String   @default("5") // decimal string
+  retentionCapAmount String?  // decimal string, optional
+  advanceAmount      String   @default("0") // decimal string
+  advanceEnabled     Boolean  @default(false)
+  version            Int      @default(1)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  deletedAt          DateTime?
+
+  project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  lines      PaymentLine[]
+  deductions PaymentDeduction[]
+  additions  PaymentAddition[]
+
+  @@unique([projectId, ipcNo])
+  @@index([projectId])
+  @@index([status])
+}
+
+model PaymentLine {
+  id              String  @id @default(cuid())
+  applicationId   String
+  boqItemId       String
+  qtyThisPeriod   String  @default("0")
+  qtyCum          String  @default("0")
+  valueThisPeriod String  @default("0")
+  valueCum        String  @default("0")
+  rate            String  @default("0")
+  sortOrder       Int     @default(0)
+
+  application PaymentApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([boqItemId])
+}
+
+model PaymentDeduction {
+  id            String  @id @default(cuid())
+  applicationId String
+  type          String  @default("OTHER") // PENALTY | BACKCHARGE | OTHER
+  descriptionEn String
+  amount        String  @default("0")
+  sortOrder     Int     @default(0)
+
+  application PaymentApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+}
+
+model PaymentAddition {
+  id            String  @id @default(cuid())
+  applicationId String
+  type          String  @default("OTHER") // MATERIALS_ON_SITE | OTHER
+  descriptionEn String
+  amount        String  @default("0")
+  sortOrder     Int     @default(0)
+
+  application PaymentApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+}
+
+// Variation: a contract variation order (linked to a BoQDocument).
+model Variation {
+  id              String    @id @default(cuid())
+  projectId       String
+  boqDocumentId   String?
+  ref             String
+  titleEn         String
+  titleAr         String?
+  status          String    @default("DRAFT") // DRAFT | SUBMITTED | APPROVED | REJECTED
+  approvedValue   String?   // decimal string, set on approval
+  version         Int       @default(1)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([status])
+}
+
+// BoQItemScheduleLink: ★ the differentiator — links a BoQItem to a Phase 2
+// Activity so cost can be plotted against the schedule over time.
+model BoQItemScheduleLink {
+  id            String   @id @default(cuid())
+  projectId     String
+  boqItemId     String
+  activityId    String
+  allocationPct String   @default("100") // decimal string — % of BoQ item cost assigned to activity
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([boqItemId, activityId])
+  @@index([projectId])
+  @@index([boqItemId])
+  @@index([activityId])
+}
+
+// ProgressUpdate: records activity % complete at a data date.
+model ProgressUpdate {
+  id             String   @id @default(cuid())
+  projectId      String
+  dataDate       String   // ISO yyyy-MM-dd — BR-DC1 injected clock
+  scheduleRunId  String?
+  notes          String?
+  version        Int      @default(1)
+  createdAt      DateTime @default(now())
+
+  project  Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  progress ActivityProgress[]
+
+  @@index([projectId])
+}
+
+model ActivityProgress {
+  id               String  @id @default(cuid())
+  progressUpdateId String
+  activityId       String
+  percentComplete  Int     @default(0) // 0-100
+  actualStart      String? // ISO date
+  actualFinish     String? // ISO date
+
+  progressUpdate ProgressUpdate @relation(fields: [progressUpdateId], references: [id], onDelete: Cascade)
+
+  @@unique([progressUpdateId, activityId])
+  @@index([progressUpdateId])
+  @@index([activityId])
+}
+
+// DailyReport: site daily log per SPEC_PHASE4_WEB.md §4.
+model DailyReport {
+  id          String    @id @default(cuid())
+  projectId   String
+  date        String    // ISO yyyy-MM-dd
+  weather     String?
+  temperature String?
+  notesEn     String?
+  notesAr     String?
+  version     Int       @default(1)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  project    Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  manpower   DailyReportManpower[]
+  equipment  DailyReportEquipment[]
+  workDone    DailyReportWorkDone[]
+
+  @@unique([projectId, date])
+  @@index([projectId])
+}
+
+model DailyReportManpower {
+  id           String  @id @default(cuid())
+  dailyReportId String
+  tradeEn      String
+  tradeAr      String?
+  count        Int     @default(0)
+  sortOrder    Int     @default(0)
+
+  dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+
+  @@index([dailyReportId])
+}
+
+model DailyReportEquipment {
+  id            String  @id @default(cuid())
+  dailyReportId String
+  descriptionEn String
+  unit          String?
+  count         Int     @default(0)
+  hours         String?
+  sortOrder     Int     @default(0)
+
+  dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+
+  @@index([dailyReportId])
+}
+
+model DailyReportWorkDone {
+  id            String  @id @default(cuid())
+  dailyReportId String
+  locationEn    String
+  locationAr    String?
+  descriptionEn String
+  descriptionAr String?
+  activityId    String?
+  sortOrder     Int     @default(0)
+
+  dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+
+  @@index([dailyReportId])
+}

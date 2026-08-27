@@ -1,0 +1,932 @@
+     1→"use client";
+     2→
+     3→/**
+     4→ * BoQ Editor View (S3/S4) — the critical screen.
+     5→ *
+     6→ * Per SPEC_PHASE1_BOQ_WEB §3 (F3): "BoQ builder: multiple BoQ documents →
+     7→ * sections → items. Editing any qty/rate updates all totals without manual
+     8→ * refresh. A BoQ with 5,000 items scrolls and recalculates without visible
+     9→ * lag (< 300 ms recompute)."
+    10→ *
+    11→ * Implementation overview:
+    12→ *   1. Document selector — dropdown to pick which BoQ document to edit, plus
+    13→ *      a "New document" button that POSTs to /api/projects/[id]/documents.
+    14→ *   2. Section tree — sections render as collapsible cards. Each card holds
+    15→ *      an items table with Code / Description / Unit / Qty / Rate / Amount
+    16→ *      + Actions columns. "Add section" lives at the top of the document,
+    17→ *      "Add item" lives at the bottom of each section.
+    18→ *   3. Inline editing — click Qty or Rate to edit in place. PATCH fires on
+    19→ *      blur or Enter with `expectedVersion` for optimistic concurrency. The
+    20→ *      server response includes `{ item, totals }` — we splice both into
+    21→ *      the document detail query cache via `setQueryData` so the totals bar
+    22→ *      updates without a refetch (live totals, no flicker).
+    23→ *   4. Delete — trash icon on each row soft-deletes the item; we invalidate
+    24→ *      the document detail query so the server recomputes totals.
+    25→ *   5. Sticky grand total bar — fixed at the bottom of the scroll area,
+    26→ *      shows subtotal, VAT (if any), and grand total with thousand separators.
+    27→ *
+    28→ * Layer purity: Client Component — imports only @tanstack/react-query,
+    29→ * next-intl, lucide-react, @/lib/queries, @/lib/mutations, @/lib/stores,
+    30→ * and shadcn/ui. No server-only code.
+    31→ */
+    32→
+    33→import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+    34→import { useTranslations } from "next-intl";
+    35→import { useEffect, useMemo, useRef, useState } from "react";
+    36→import {
+    37→  Plus,
+    38→  Trash2,
+    39→  ChevronDown,
+    40→  ChevronRight,
+    41→  FileText,
+    42→  Loader2,
+    43→} from "lucide-react";
+    44→import { queryKeys, fetchJson } from "@/lib/queries";
+    45→import { apiPost, apiPatch, apiDelete } from "@/lib/mutations";
+    46→import { useUIStore } from "@/lib/stores/ui-store";
+    47→import { Button } from "@/components/ui/button";
+    48→import { Input } from "@/components/ui/input";
+    49→import {
+    50→  Select,
+    51→  SelectContent,
+    52→  SelectItem,
+    53→  SelectTrigger,
+    54→  SelectValue,
+    55→} from "@/components/ui/select";
+    56→import { toast } from "sonner";
+    57→
+    58→// ─── Types ────────────────────────────────────────────────────────────────
+    59→
+    60→interface BoQDocument {
+    61→  id: string;
+    62→  projectId: string;
+    63→  nameEn: string;
+    64→  nameAr: string | null;
+    65→  status: string;
+    66→  version: number;
+    67→}
+    68→
+    69→interface BoQSection {
+    70→  id: string;
+    71→  documentId: string;
+    72→  code: string;
+    73→  titleEn: string;
+    74→  titleAr: string | null;
+    75→  sortOrder: number;
+    76→  version: number;
+    77→}
+    78→
+    79→interface BoQItem {
+    80→  id: string;
+    81→  sectionId: string;
+    82→  documentId: string;
+    83→  code: string | null;
+    84→  descriptionEn: string;
+    85→  descriptionAr: string | null;
+    86→  unitId: string | null;
+    87→  quantity: string;
+    88→  rate: string;
+    89→  amount: string;
+    90→  itemType: string;
+    91→  sortOrder: number;
+    92→  version: number;
+    93→}
+    94→
+    95→interface DocumentTotals {
+    96→  subtotal: string;
+    97→  vatPercentage: string;
+    98→  vatAmount: string;
+    99→  totalIncludingVat: string;
+   100→  itemCount: number;
+   101→}
+   102→
+   103→interface DocumentsListResponse {
+   104→  documents: BoQDocument[];
+   105→}
+   106→
+   107→interface DocumentDetailResponse {
+   108→  document: BoQDocument;
+   109→  sections: BoQSection[];
+   110→  items: BoQItem[];
+   111→  totals: DocumentTotals;
+   112→}
+   113→
+   114→interface PatchItemResponse {
+   115→  item: BoQItem;
+   116→  totals: DocumentTotals;
+   117→}
+   118→
+   119→// ─── Root component ───────────────────────────────────────────────────────
+   120→
+   121→export function BoQEditorView() {
+   122→  const t = useTranslations("boq");
+   123→  const tc = useTranslations("common");
+   124→  const currentProjectId = useUIStore((s) => s.currentProjectId);
+   125→  const currentDocumentId = useUIStore((s) => s.currentDocumentId);
+   126→  const setCurrentDocument = useUIStore((s) => s.setCurrentDocument);
+   127→  const setCurrentView = useUIStore((s) => s.setCurrentView);
+   128→
+   129→  // Fetch the list of BoQ documents for the current project. Disabled when
+   130→  // there's no current project (we'll show the empty state instead).
+   131→  const { data: docsResp, isLoading: docsLoading } =
+   132→    useQuery<DocumentsListResponse>({
+   133→      queryKey: currentProjectId
+   134→        ? queryKeys.documents.list(currentProjectId)
+   135→        : ["documents", "list", "_disabled"],
+   136→      queryFn: () =>
+   137→        fetchJson(`/api/projects/${currentProjectId}/documents`),
+   138→      enabled: !!currentProjectId,
+   139→    });
+   140→
+   141→  const documents = docsResp?.documents ?? [];
+   142→
+   143→  // Auto-select the first document when documents first load and the user
+   144→  // hasn't picked one. The selected doc id is stored in the UI store so it
+   145→  // survives view switches (e.g. BoQ → Library → BoQ).
+   146→  useEffect(() => {
+   147→    if (!currentDocumentId && documents.length > 0) {
+   148→      setCurrentDocument(documents[0].id);
+   149→    }
+   150→  }, [currentDocumentId, documents, setCurrentDocument]);
+   151→
+   152→  // The currently selected document id — prefer the UI store, fall back to
+   153→  // the first document in the list.
+   154→  const selectedDocId = currentDocumentId ?? documents[0]?.id ?? null;
+   155→
+   156→  // ─── Empty state: no project selected ──────────────────────────────────
+   157→  if (!currentProjectId) {
+   158→    return (
+   159→      <div className="max-w-6xl mx-auto p-8">
+   160→        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+   161→        <div className="mt-8 rounded-lg border border-border border-dashed p-12 text-center">
+   162→          <p className="text-sm text-muted-foreground mb-4">
+   163→            No project selected. Create a project or pick one from the projects list to start building a BoQ.
+   164→          </p>
+   165→          <div className="flex items-center justify-center gap-2">
+   166→            <Button
+   167→              type="button"
+   168→              onClick={() => setCurrentView("projects")}
+   169→              className="bg-primary text-primary-foreground hover:bg-[var(--linear-primary-hover)]"
+   170→            >
+   171→              <Plus className="w-4 h-4 mr-1" />
+   172→              Go to Projects
+   173→            </Button>
+   174→            <Button
+   175→              type="button"
+   176→              variant="outline"
+   177→              onClick={() => setCurrentView("dashboard")}
+   178→            >
+   179→              Go to Dashboard
+   180→            </Button>
+   181→          </div>
+   182→        </div>
+   183→      </div>
+   184→    );
+   185→  }
+   186→
+   187→  return (
+   188→    <div className="max-w-6xl mx-auto p-8 pb-32 space-y-6">
+   189→      {/* Header */}
+   190→      <div className="flex items-end justify-between gap-4 flex-wrap">
+   191→        <div>
+   192→          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+   193→          <p className="text-sm text-muted-foreground mt-1">
+   194→            {documents.length}{" "}
+   195→            {documents.length === 1 ? "document" : "documents"} in this project
+   196→          </p>
+   197→        </div>
+   198→        <div className="flex items-center gap-2">
+   199→          <DocumentSelector
+   200→            documents={documents}
+   201→            value={selectedDocId}
+   202→            onChange={setCurrentDocument}
+   203→            loading={docsLoading}
+   204→          />
+   205→          <CreateDocumentButton projectId={currentProjectId} />
+   206→        </div>
+   207→      </div>
+   208→
+   209→      {/* Body */}
+   210→      {docsLoading ? (
+   211→        <div className="rounded-lg border border-border p-8 text-center text-sm text-muted-foreground">
+   212→          {tc("loading")}
+   213→        </div>
+   214→      ) : documents.length === 0 ? (
+   215→        <div className="rounded-lg border border-border border-dashed p-12 text-center">
+   216→          <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center mx-auto mb-3">
+   217→            <FileText className="w-5 h-5 text-muted-foreground" />
+   218→          </div>
+   219→          <h3 className="text-sm font-medium">No documents yet</h3>
+   220→          <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+   221→            Create a BoQ document to start adding sections and items.
+   222→          </p>
+   223→          <div className="mt-4">
+   224→            <CreateDocumentButton
+   225→              projectId={currentProjectId}
+   226→              variant="default"
+   227→            />
+   228→          </div>
+   229→        </div>
+   230→      ) : selectedDocId ? (
+   231→        <DocumentEditor documentId={selectedDocId} />
+   232→      ) : null}
+   233→    </div>
+   234→  );
+   235→}
+   236→
+   237→// ─── Document selector ────────────────────────────────────────────────────
+   238→
+   239→function DocumentSelector({
+   240→  documents,
+   241→  value,
+   242→  onChange,
+   243→  loading,
+   244→}: {
+   245→  documents: BoQDocument[];
+   246→  value: string | null;
+   247→  onChange: (id: string) => void;
+   248→  loading: boolean;
+   249→}) {
+   250→  const t = useTranslations("boq");
+   251→  const tc = useTranslations("common");
+   252→  if (loading) {
+   253→    return (
+   254→      <div className="h-9 px-3 flex items-center rounded-md border border-input bg-input/30 text-sm text-muted-foreground">
+   255→        {tc("loading")}
+   256→      </div>
+   257→    );
+   258→  }
+   259→  if (documents.length === 0) return null;
+   260→  return (
+   261→    <Select value={value ?? undefined} onValueChange={onChange}>
+   262→      <SelectTrigger size="sm" className="w-64">
+   263→        <SelectValue placeholder={t("document")} />
+   264→      </SelectTrigger>
+   265→      <SelectContent>
+   266→        {documents.map((d) => (
+   267→          <SelectItem key={d.id} value={d.id}>
+   268→            <span className="font-mono text-xs text-muted-foreground mr-2">
+   269→              {d.status}
+   270→            </span>
+   271→            <span className="truncate">{d.nameEn}</span>
+   272→          </SelectItem>
+   273→        ))}
+   274→      </SelectContent>
+   275→    </Select>
+   276→  );
+   277→}
+   278→
+   279→// ─── Create document button ───────────────────────────────────────────────
+   280→
+   281→function CreateDocumentButton({
+   282→  projectId,
+   283→  variant = "outline",
+   284→}: {
+   285→  projectId: string;
+   286→  variant?: "default" | "outline" | "secondary" | "ghost";
+   287→}) {
+   288→  const queryClient = useQueryClient();
+   289→
+   290→  const mutation = useMutation({
+   291→    mutationFn: async () => {
+   292→      const name = `BoQ ${new Date().toLocaleDateString()}`;
+   293→      return apiPost<BoQDocument>(`/api/projects/${projectId}/documents`, {
+   294→        projectId,
+   295→        nameEn: name,
+   296→      });
+   297→    },
+   298→    onSuccess: (doc) => {
+   299→      // Invalidate the list so the new document appears in the selector.
+   300→      queryClient.invalidateQueries({
+   301→        queryKey: queryKeys.documents.list(projectId),
+   302→      });
+   303→      // Set as the active document so the editor opens it immediately.
+   304→      useUIStore.getState().setCurrentDocument(doc.id);
+   305→      toast.success("Document created");
+   306→    },
+   307→    onError: (err: Error) => toast.error(err.message),
+   308→  });
+   309→
+   310→  return (
+   311→    <Button
+   312→      type="button"
+   313→      variant={variant}
+   314→      size="sm"
+   315→      disabled={mutation.isPending}
+   316→      onClick={() => mutation.mutate()}
+   317→      className="gap-1"
+   318→    >
+   319→      {mutation.isPending ? (
+   320→        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+   321→      ) : (
+   322→        <Plus className="w-3.5 h-3.5" />
+   323→      )}
+   324→      New document
+   325→    </Button>
+   326→  );
+   327→}
+   328→
+   329→// ─── Document editor (main body) ──────────────────────────────────────────
+   330→
+   331→function DocumentEditor({ documentId }: { documentId: string }) {
+   332→  const t = useTranslations("boq");
+   333→  const tc = useTranslations("common");
+   334→
+   335→  const { data, isLoading, error } = useQuery<DocumentDetailResponse>({
+   336→    queryKey: queryKeys.documents.detail(documentId),
+   337→    queryFn: () => fetchJson(`/api/documents/${documentId}`),
+   338→  });
+   339→
+   340→  // Group items by section. Must be called unconditionally (Rules of Hooks).
+   341→  // Returns an empty Map while `data` is loading.
+   342→  const itemsBySection = useMemo(() => {
+   343→    const map = new Map<string, BoQItem[]>();
+   344→    if (!data) return map;
+   345→    for (const s of data.sections) map.set(s.id, []);
+   346→    for (const item of data.items) {
+   347→      const arr = map.get(item.sectionId);
+   348→      if (arr) arr.push(item);
+   349→    }
+   350→    // Sort each section's items by sortOrder for stable display.
+   351→    for (const arr of map.values()) {
+   352→      arr.sort((a, b) => a.sortOrder - b.sortOrder);
+   353→    }
+   354→    return map;
+   355→  }, [data]);
+   356→
+   357→  if (isLoading) {
+   358→    return (
+   359→      <div className="rounded-lg border border-border p-8 text-center text-sm text-muted-foreground">
+   360→        {tc("loading")}
+   361→      </div>
+   362→    );
+   363→  }
+   364→  if (error || !data) {
+   365→    return (
+   366→      <div className="rounded-lg border border-border p-8 text-center text-sm text-muted-foreground">
+   367→        Failed to load document.
+   368→        {error ? ` ${error.message}` : ""}
+   369→      </div>
+   370→    );
+   371→  }
+   372→
+   373→  const { document: doc, sections, totals } = data;
+   374→
+   375→  return (
+   376→    <div className="space-y-4">
+   377→      {/* Document header */}
+   378→      <div className="rounded-lg border border-border p-4 bg-card">
+   379→        <div className="flex items-center justify-between gap-4 flex-wrap">
+   380→          <div className="min-w-0">
+   381→            <div className="text-xs uppercase tracking-wide text-muted-foreground">
+   382→              {t("document")}
+   383→            </div>
+   384→            <div className="text-lg font-medium truncate">{doc.nameEn}</div>
+   385→            <div className="text-xs text-muted-foreground mt-0.5">
+   386→              Status: <span className="font-mono">{doc.status}</span>
+   387→              {" · "}
+   388→              {sections.length}{" "}
+   389→              {sections.length === 1 ? "section" : "sections"}
+   390→              {" · "}
+   391→              {totals.itemCount} {t("item").toLowerCase()}
+   392→              {totals.itemCount === 1 ? "" : "s"}
+   393→            </div>
+   394→          </div>
+   395→          <CreateSectionButton
+   396→            documentId={documentId}
+   397→            sortOrder={sections.length}
+   398→          />
+   399→        </div>
+   400→      </div>
+   401→
+   402→      {/* Sections tree */}
+   403→      {sections.length === 0 ? (
+   404→        <div className="rounded-lg border border-border border-dashed p-12 text-center">
+   405→          <h3 className="text-sm font-medium">No sections yet</h3>
+   406→          <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+   407→            Add a section to start adding items.
+   408→          </p>
+   409→          <div className="mt-4">
+   410→            <CreateSectionButton
+   411→              documentId={documentId}
+   412→              sortOrder={0}
+   413→              variant="default"
+   414→            />
+   415→          </div>
+   416→        </div>
+   417→      ) : (
+   418→        <div className="space-y-3">
+   419→          {sections.map((section) => (
+   420→            <SectionBlock
+   421→              key={section.id}
+   422→              section={section}
+   423→              items={itemsBySection.get(section.id) ?? []}
+   424→            />
+   425→          ))}
+   426→        </div>
+   427→      )}
+   428→
+   429→      {/* Grand total bar (sticky to the bottom of the scroll area) */}
+   430→      <GrandTotalBar totals={totals} />
+   431→    </div>
+   432→  );
+   433→}
+   434→
+   435→// ─── Section block ─────────────────────────────────────────────────────────
+   436→
+   437→function SectionBlock({
+   438→  section,
+   439→  items,
+   440→}: {
+   441→  section: BoQSection;
+   442→  items: BoQItem[];
+   443→}) {
+   444→  const t = useTranslations("boq");
+   445→  const [expanded, setExpanded] = useState(true);
+   446→
+   447→  // Section subtotal = Σ of rounded item amounts (per BR-3). We sum the
+   448→  // server-computed `amount` strings — the BoQItem entity exposes this field
+   449→  // pre-computed by the repository on read.
+   450→  const sectionSubtotal = useMemo(() => {
+   451→    return items
+   452→      .reduce((sum, i) => sum + Number(i.amount || "0"), 0)
+   453→      .toFixed(2);
+   454→  }, [items]);
+   455→
+   456→  return (
+   457→    <div className="rounded-lg border border-border overflow-hidden">
+   458→      {/* Section header (click to expand/collapse) */}
+   459→      <button
+   460→        type="button"
+   461→        onClick={() => setExpanded((e) => !e)}
+   462→        className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+   463→      >
+   464→        <div className="flex items-center gap-2 min-w-0">
+   465→          {expanded ? (
+   466→            <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+   467→          ) : (
+   468→            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+   469→          )}
+   470→          <span className="font-mono text-xs text-muted-foreground shrink-0">
+   471→            {section.code}
+   472→          </span>
+   473→          <span className="font-medium truncate">
+   474→            {section.titleEn || "(untitled)"}
+   475→          </span>
+   476→        </div>
+   477→        <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+   478→          <span>
+   479→            {items.length} {t("item").toLowerCase()}
+   480→            {items.length === 1 ? "" : "s"}
+   481→          </span>
+   482→          <span className="font-mono">{formatNumber(sectionSubtotal)}</span>
+   483→        </div>
+   484→      </button>
+   485→
+   486→      {/* Items table */}
+   487→      {expanded && (
+   488→        <div>
+   489→          {items.length === 0 ? (
+   490→            <div className="p-6 text-center text-xs text-muted-foreground">
+   491→              No items in this section.
+   492→              <div className="mt-3 flex justify-center">
+   493→                <CreateItemButton sectionId={section.id} sortOrder={0} />
+   494→              </div>
+   495→            </div>
+   496→          ) : (
+   497→            <>
+   498→              <table className="w-full text-sm">
+   499→                <thead>
+   500→                  <tr className="border-b border-border bg-muted/10 text-left">
+   501→                    <th className="px-4 py-2 font-medium text-muted-foreground w-24">
+   502→                      {t("code")}
+   503→                    </th>
+   504→                    <th className="px-4 py-2 font-medium text-muted-foreground">
+   505→                      {t("description")}
+   506→                    </th>
+   507→                    <th className="px-4 py-2 font-medium text-muted-foreground w-20">
+   508→                      {t("unit")}
+   509→                    </th>
+   510→                    <th className="px-4 py-2 font-medium text-muted-foreground w-24 text-right">
+   511→                      {t("quantity")}
+   512→                    </th>
+   513→                    <th className="px-4 py-2 font-medium text-muted-foreground w-28 text-right">
+   514→                      {t("rate")}
+   515→                    </th>
+   516→                    <th className="px-4 py-2 font-medium text-muted-foreground w-32 text-right">
+   517→                      {t("amount")}
+   518→                    </th>
+   519→                    <th className="px-4 py-2 font-medium text-muted-foreground w-12 text-right" />
+   520→                  </tr>
+   521→                </thead>
+   522→                <tbody>
+   523→                  {items.map((item) => (
+   524→                    <ItemRow key={item.id} item={item} />
+   525→                  ))}
+   526→                </tbody>
+   527→              </table>
+   528→              <div className="border-t border-border px-4 py-2 flex items-center justify-between text-xs">
+   529→                <CreateItemButton sectionId={section.id} sortOrder={items.length} />
+   530→                <div className="text-muted-foreground">
+   531→                  {t("subtotal")}:{" "}
+   532→                  <span className="font-mono text-foreground">
+   533→                    {formatNumber(sectionSubtotal)}
+   534→                  </span>
+   535→                </div>
+   536→              </div>
+   537→            </>
+   538→          )}
+   539→        </div>
+   540→      )}
+   541→    </div>
+   542→  );
+   543→}
+   544→
+   545→// ─── Item row ──────────────────────────────────────────────────────────────
+   546→
+   547→function ItemRow({ item }: { item: BoQItem }) {
+   548→  return (
+   549→    <tr className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors group">
+   550→      <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
+   551→        {item.code ?? "—"}
+   552→      </td>
+   553→      <td className="px-4 py-2">{item.descriptionEn}</td>
+   554→      <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
+   555→        {item.unitId ?? "—"}
+   556→      </td>
+   557→      <td className="px-4 py-2 text-right">
+   558→        <InlineEdit
+   559→          itemId={item.id}
+   560→          field="quantity"
+   561→          value={item.quantity}
+   562→          version={item.version}
+   563→        />
+   564→      </td>
+   565→      <td className="px-4 py-2 text-right">
+   566→        <InlineEdit
+   567→          itemId={item.id}
+   568→          field="rate"
+   569→          value={item.rate}
+   570→          version={item.version}
+   571→        />
+   572→      </td>
+   573→      <td className="px-4 py-2 text-right font-mono">
+   574→        {formatNumber(item.amount)}
+   575→      </td>
+   576→      <td className="px-4 py-2 text-right">
+   577→        <DeleteItemButton itemId={item.id} version={item.version} />
+   578→      </td>
+   579→    </tr>
+   580→  );
+   581→}
+   582→
+   583→// ─── Inline edit (Qty / Rate) ──────────────────────────────────────────────
+   584→
+   585→/**
+   586→ * Click-to-edit cell. On commit (blur or Enter), PATCHes `/api/items/[id]`
+   587→ * with `{ [field]: value, expectedVersion }`. On success, splices the
+   588→ * returned `{ item, totals }` into the document detail cache so the totals
+   589→ * bar updates without a refetch (live totals — F3 requirement).
+   590→ *
+   591→ * Optimistic concurrency: `expectedVersion` is the item's current `version`
+   592→ * field. If the server returns 409 Conflict (concurrent edit), the mutation
+   593→ * errors out, we revert the draft to the cached server value, and surface a
+   594→ * toast.
+   595→ */
+   596→function InlineEdit({
+   597→  itemId,
+   598→  field,
+   599→  value,
+   600→  version,
+   601→}: {
+   602→  itemId: string;
+   603→  field: "quantity" | "rate";
+   604→  value: string;
+   605→  version: number;
+   606→}) {
+   607→  const queryClient = useQueryClient();
+   608→  const [editing, setEditing] = useState(false);
+   609→  // The draft is initialized from the server value at the moment the user
+   610→  // enters edit mode (in `startEditing`, an event handler — not in an
+   611→  // effect). This avoids the set-state-in-effect anti-pattern: the displayed
+   612→  // value when *not* editing is just `value` (read directly from props).
+   613→  const [draft, setDraft] = useState(value);
+   614→  const [saving, setSaving] = useState(false);
+   615→  const inputRef = useRef<HTMLInputElement>(null);
+   616→
+   617→  // Focus + select-all on entering edit mode for fast overwrite. This effect
+   618→  // touches the DOM (input.focus), not React state — allowed.
+   619→  useEffect(() => {
+   620→    if (editing && inputRef.current) {
+   621→      inputRef.current.focus();
+   622→      inputRef.current.select();
+   623→    }
+   624→  }, [editing]);
+   625→
+   626→  const startEditing = () => {
+   627→    // Sync the draft to the freshest server value at click-time so any
+   628→    // updates that arrived since the last render are reflected.
+   629→    setDraft(value);
+   630→    setEditing(true);
+   631→  };
+   632→
+   633→  const mutation = useMutation({
+   634→    mutationFn: async (vars: { value: string; expectedVersion: number }) => {
+   635→      const body: Record<string, unknown> = {
+   636→        expectedVersion: vars.expectedVersion,
+   637→      };
+   638→      body[field] = vars.value;
+   639→      return apiPatch<PatchItemResponse>(`/api/items/${itemId}`, body);
+   640→    },
+   641→    onMutate: () => setSaving(true),
+   642→    onSuccess: (data) => {
+   643→      // Splice the updated item + new totals into the document detail cache.
+   644→      // This avoids a refetch — the totals bar updates instantly (F3 live
+   645→      // totals requirement).
+   646→      queryClient.setQueryData<DocumentDetailResponse>(
+   647→        queryKeys.documents.detail(data.item.documentId),
+   648→        (old) => {
+   649→          if (!old) return old;
+   650→          return {
+   651→            ...old,
+   652→            items: old.items.map((i) =>
+   653→              i.id === data.item.id ? data.item : i,
+   654→            ),
+   655→            totals: data.totals,
+   656→          };
+   657→        },
+   658→      );
+   659→      setSaving(false);
+   660→      setEditing(false);
+   661→    },
+   662→    onError: (err: Error) => {
+   663→      toast.error(`Failed to save: ${err.message}`);
+   664→      setSaving(false);
+   665→      setEditing(false);
+   666→      setDraft(value); // revert to cached server value
+   667→    },
+   668→  });
+   669→
+   670→  const commit = () => {
+   671→    if (draft === value) {
+   672→      // No change — just exit edit mode.
+   673→      setEditing(false);
+   674→      return;
+   675→    }
+   676→    // Basic numeric validation. The server-side zod schema accepts decimal
+   677→    // strings; we reject empty / non-numeric input before the round-trip.
+   678→    if (draft.trim() === "" || Number.isNaN(Number(draft))) {
+   679→      toast.error("Please enter a valid number");
+   680→      setDraft(value);
+   681→      setEditing(false);
+   682→      return;
+   683→    }
+   684→    mutation.mutate({ value: draft, expectedVersion: version });
+   685→  };
+   686→
+   687→  if (editing) {
+   688→    return (
+   689→      <div className="flex items-center justify-end gap-1">
+   690→        <Input
+   691→          ref={inputRef}
+   692→          type="text"
+   693→          inputMode="decimal"
+   694→          value={draft}
+   695→          onChange={(e) => setDraft(e.target.value)}
+   696→          onBlur={commit}
+   697→          onKeyDown={(e) => {
+   698→            if (e.key === "Enter") {
+   699→              e.preventDefault();
+   700→              commit();
+   701→            }
+   702→            if (e.key === "Escape") {
+   703→              setDraft(value);
+   704→              setEditing(false);
+   705→            }
+   706→          }}
+   707→          className="h-7 w-24 text-right font-mono text-xs"
+   708→          disabled={saving}
+   709→        />
+   710→        {saving && (
+   711→          <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+   712→        )}
+   713→      </div>
+   714→    );
+   715→  }
+   716→
+   717→  return (
+   718→    <button
+   719→      type="button"
+   720→      onClick={startEditing}
+   721→      className="font-mono text-xs hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 -my-1 transition-colors w-full text-right inline-flex items-center justify-end gap-1"
+   722→      title="Click to edit"
+   723→    >
+   724→      <span>{formatNumber(value)}</span>
+   725→      {saving && (
+   726→        <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+   727→      )}
+   728→    </button>
+   729→  );
+   730→}
+   731→
+   732→// ─── Delete item button ────────────────────────────────────────────────────
+   733→
+   734→function DeleteItemButton({
+   735→  itemId,
+   736→  version,
+   737→}: {
+   738→  itemId: string;
+   739→  version: number;
+   740→}) {
+   741→  const queryClient = useQueryClient();
+   742→
+   743→  const mutation = useMutation({
+   744→    mutationFn: async () => {
+   745→      // expectedVersion is passed as a query param per the API contract.
+   746→      return apiDelete<void>(
+   747→        `/api/items/${itemId}?expectedVersion=${version}`,
+   748→      );
+   749→    },
+   750→    onSuccess: () => {
+   751→      // Invalidate the whole documents query namespace — the server
+   752→      // recomputes totals on the next fetch (the simplest correct path for
+   753→      // deletes; the alternative would be client-side totals recompute which
+   754→      // we avoid to keep totals computation in the pure domain function).
+   755→      queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
+   756→      toast.success("Item deleted");
+   757→    },
+   758→    onError: (err: Error) => toast.error(err.message),
+   759→  });
+   760→
+   761→  return (
+   762→    <Button
+   763→      type="button"
+   764→      variant="ghost"
+   765→      size="icon"
+   766→      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+   767→      onClick={() => mutation.mutate()}
+   768→      disabled={mutation.isPending}
+   769→      aria-label="Delete item"
+   770→    >
+   771→      {mutation.isPending ? (
+   772→        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+   773→      ) : (
+   774→        <Trash2 className="w-3.5 h-3.5" />
+   775→      )}
+   776→    </Button>
+   777→  );
+   778→}
+   779→
+   780→// ─── Create item button ────────────────────────────────────────────────────
+   781→
+   782→function CreateItemButton({
+   783→  sectionId,
+   784→  sortOrder,
+   785→}: {
+   786→  sectionId: string;
+   787→  sortOrder: number;
+   788→}) {
+   789→  const t = useTranslations("boq");
+   790→  const queryClient = useQueryClient();
+   791→
+   792→  const mutation = useMutation({
+   793→    mutationFn: async () => {
+   794→      // The route handler injects `documentId` and `projectId` from the
+   795→      // parent section, so we only need the item-specific fields here.
+   796→      return apiPost<BoQItem>(`/api/sections/${sectionId}/items`, {
+   797→        sectionId,
+   798→        descriptionEn: "New item",
+   799→        quantity: "0",
+   800→        rate: "0",
+   801→        sortOrder,
+   802→      });
+   803→    },
+   804→    onSuccess: () => {
+   805→      queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
+   806→      toast.success("Item added");
+   807→    },
+   808→    onError: (err: Error) => toast.error(err.message),
+   809→  });
+   810→
+   811→  return (
+   812→    <Button
+   813→      type="button"
+   814→      variant="outline"
+   815→      size="sm"
+   816→      onClick={() => mutation.mutate()}
+   817→      disabled={mutation.isPending}
+   818→      className="h-7 text-xs gap-1"
+   819→    >
+   820→      {mutation.isPending ? (
+   821→        <Loader2 className="w-3 h-3 animate-spin" />
+   822→      ) : (
+   823→        <Plus className="w-3 h-3" />
+   824→      )}
+   825→      {t("addItem")}
+   826→    </Button>
+   827→  );
+   828→}
+   829→
+   830→// ─── Create section button ─────────────────────────────────────────────────
+   831→
+   832→function CreateSectionButton({
+   833→  documentId,
+   834→  sortOrder,
+   835→  variant = "outline",
+   836→}: {
+   837→  documentId: string;
+   838→  sortOrder: number;
+   839→  variant?: "default" | "outline" | "secondary" | "ghost";
+   840→}) {
+   841→  const t = useTranslations("boq");
+   842→  const queryClient = useQueryClient();
+   843→
+   844→  const mutation = useMutation({
+   845→    mutationFn: async () => {
+   846→      // The route handler resolves `projectId` from the parent document, so
+   847→      // we only need documentId (matched against the URL) + the
+   848→      // section-specific fields.
+   849→      return apiPost<BoQSection>(`/api/documents/${documentId}/sections`, {
+   850→        documentId,
+   851→        code: String(sortOrder + 1),
+   852→        titleEn: "New Section",
+   853→        sortOrder,
+   854→      });
+   855→    },
+   856→    onSuccess: () => {
+   857→      queryClient.invalidateQueries({
+   858→        queryKey: queryKeys.documents.detail(documentId),
+   859→      });
+   860→      queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
+   861→      toast.success("Section added");
+   862→    },
+   863→    onError: (err: Error) => toast.error(err.message),
+   864→  });
+   865→
+   866→  return (
+   867→    <Button
+   868→      type="button"
+   869→      variant={variant}
+   870→      size="sm"
+   871→      onClick={() => mutation.mutate()}
+   872→      disabled={mutation.isPending}
+   873→      className="gap-1"
+   874→    >
+   875→      {mutation.isPending ? (
+   876→        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+   877→      ) : (
+   878→        <Plus className="w-3.5 h-3.5" />
+   879→      )}
+   880→      {t("addSection")}
+   881→    </Button>
+   882→  );
+   883→}
+   884→
+   885→// ─── Grand total bar ───────────────────────────────────────────────────────
+   886→
+   887→function GrandTotalBar({ totals }: { totals: DocumentTotals }) {
+   888→  const t = useTranslations("boq");
+   889→  const hasVat = totals.vatPercentage !== "" && totals.vatAmount !== "0.00";
+   890→
+   891→  return (
+   892→    <div className="sticky bottom-0 left-0 right-0 -mx-8 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 z-10">
+   893→      <div className="px-8 py-3 flex items-center justify-end gap-6 text-sm flex-wrap">
+   894→        <div className="flex items-center gap-2">
+   895→          <span className="text-muted-foreground">{t("subtotal")}</span>
+   896→          <span className="font-mono">{formatNumber(totals.subtotal)}</span>
+   897→        </div>
+   898→        {hasVat && (
+   899→          <div className="flex items-center gap-2">
+   900→            <span className="text-muted-foreground">
+   901→              VAT ({totals.vatPercentage}%)
+   902→            </span>
+   903→            <span className="font-mono">{formatNumber(totals.vatAmount)}</span>
+   904→          </div>
+   905→        )}
+   906→        <div className="flex items-center gap-2 border-l border-border pl-6">
+   907→          <span className="text-muted-foreground font-medium">
+   908→            {t("grandTotal")}
+   909→          </span>
+   910→          <span className="font-mono font-semibold text-base">
+   911→            {formatNumber(totals.totalIncludingVat)}
+   912→          </span>
+   913→        </div>
+   914→      </div>
+   915→    </div>
+   916→  );
+   917→}
+   918→
+   919→// ─── Helpers ────────────────────────────────────────────────────────────────
+   920→
+   921→/**
+   922→ * Format a decimal string with thousand separators on the integer part.
+   923→ * Pass-through if the value can't be split — the API returns decimal.js
+   924→ * `toFixed(2)` strings like "1067.50", so we always have a fractional part.
+   925→ */
+   926→function formatNumber(value: string | null | undefined): string {
+   927→  if (!value) return "0.00";
+   928→  const [whole, frac] = value.split(".");
+   929→  const formattedWhole = (whole ?? "0").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+   930→  return frac !== undefined ? `${formattedWhole}.${frac}` : formattedWhole;
+   931→}
+   932→

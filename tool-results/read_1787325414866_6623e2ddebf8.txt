@@ -1,0 +1,961 @@
+     1→"use client";
+     2→
+     3→/**
+     4→ * SubmittalsView (S18) — Submittals Log.
+     5→ *
+     6→ * Per SPEC_PHASE3_WEB.md §6 (S18): table + status timeline + status-change
+     7→ * actions.
+     8→ *
+     9→ * Data:
+    10→ *   - GET  /api/projects/[projectId]/submittals   → { submittals: Submittal[] }
+    11→ *   - POST /api/projects/[projectId]/submittals   → Submittal (auto-gen ref)
+    12→ *   - GET  /api/submittals/[id]                   → { submittal, events }
+    13→ *   - POST /api/submittals/[id]/status            → { submittal, event }
+    14→ *
+    15→ * Per BR-DC2: submittal ref is auto-generated as "SUB-###" (numbering domain).
+    16→ * Per BR-DC5: status workflow draft → submitted → under-review →
+    17→ *             approved | approved-with-comments | rejected | revise-resubmit.
+    18→ *             Final = approved | approved-with-comments | rejected.
+    19→ * Per BR-DC6: due date = submittedDate + reviewPeriodDays (calendar days).
+    20→ *             Overdue ⇔ asOf > due AND status is non-final and not DRAFT.
+    21→ *             Overdue badge: red if overdue, amber if due within 3 days.
+    22→ * Per BR-DC8: every status change writes an append-only SubmittalEvent.
+    23→ *
+    24→ * Empty states:
+    25→ *   - No project selected → "Go to Projects" CTA.
+    26→ *   - No submittals yet → "Add a submittal to start tracking reviews."
+    27→ *
+    28→ * Layer purity: Client Component — imports only @tanstack/react-query,
+    29→ * next-intl, lucide-react, @/lib/queries, @/lib/mutations, @/lib/stores,
+    30→ * shadcn/ui. No server-only code.
+    31→ */
+    32→
+    33→import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+    34→import { useTranslations } from "next-intl";
+    35→import { useMemo, useState } from "react";
+    36→import {
+    37→  Send,
+    38→  Plus,
+    39→  Loader2,
+    40→  ArrowRight,
+    41→  AlertTriangle,
+    42→  Clock,
+    43→} from "lucide-react";
+    44→import { queryKeys, fetchJson } from "@/lib/queries";
+    45→import { apiPost } from "@/lib/mutations";
+    46→import { useUIStore } from "@/lib/stores/ui-store";
+    47→import { Button } from "@/components/ui/button";
+    48→import { Input } from "@/components/ui/input";
+    49→import { Label } from "@/components/ui/label";
+    50→import { Badge } from "@/components/ui/badge";
+    51→import {
+    52→  Select,
+    53→  SelectContent,
+    54→  SelectItem,
+    55→  SelectTrigger,
+    56→  SelectValue,
+    57→} from "@/components/ui/select";
+    58→import {
+    59→  Sheet,
+    60→  SheetContent,
+    61→  SheetDescription,
+    62→  SheetHeader,
+    63→  SheetTitle,
+    64→} from "@/components/ui/sheet";
+    65→import {
+    66→  Dialog,
+    67→  DialogContent,
+    68→  DialogDescription,
+    69→  DialogFooter,
+    70→  DialogHeader,
+    71→  DialogTitle,
+    72→} from "@/components/ui/dialog";
+    73→import {
+    74→  DropdownMenu,
+    75→  DropdownMenuContent,
+    76→  DropdownMenuItem,
+    77→  DropdownMenuLabel,
+    78→  DropdownMenuSeparator,
+    79→  DropdownMenuTrigger,
+    80→} from "@/components/ui/dropdown-menu";
+    81→import { toast } from "sonner";
+    82→import type {
+    83→  Discipline,
+    84→  SubmittalStatus,
+    85→  SubmittalType,
+    86→} from "@shared/entities";
+    87→
+    88→// ─── Constants ────────────────────────────────────────────────────────────
+    89→
+    90→const DISCIPLINES: Discipline[] = [
+    91→  "ARC",
+    92→  "STR",
+    93→  "CIV",
+    94→  "MEC",
+    95→  "ELE",
+    96→  "PLB",
+    97→  "FIR",
+    98→  "LND",
+    99→];
+   100→
+   101→const SUBMITTAL_TYPES: SubmittalType[] = ["MATERIAL", "TECHNICAL"];
+   102→
+   103→const SUBMITTAL_STATUSES: SubmittalStatus[] = [
+   104→  "DRAFT",
+   105→  "SUBMITTED",
+   106→  "UNDER_REVIEW",
+   107→  "APPROVED",
+   108→  "APPROVED_WITH_COMMENTS",
+   109→  "REJECTED",
+   110→  "REVISE_RESUBMIT",
+   111→];
+   112→
+   113→const FINAL_SUBMITTAL_STATUSES: SubmittalStatus[] = [
+   114→  "APPROVED",
+   115→  "APPROVED_WITH_COMMENTS",
+   116→  "REJECTED",
+   117→];
+   118→
+   119→// Valid transitions per BR-DC5 (mirror of the status-workflow domain module).
+   120→const SUBMITTAL_TRANSITIONS: Record<SubmittalStatus, SubmittalStatus[]> = {
+   121→  DRAFT: ["SUBMITTED"],
+   122→  SUBMITTED: [
+   123→    "UNDER_REVIEW",
+   124→    "APPROVED",
+   125→    "APPROVED_WITH_COMMENTS",
+   126→    "REJECTED",
+   127→    "REVISE_RESUBMIT",
+   128→  ],
+   129→  UNDER_REVIEW: [
+   130→    "APPROVED",
+   131→    "APPROVED_WITH_COMMENTS",
+   132→    "REJECTED",
+   133→    "REVISE_RESUBMIT",
+   134→  ],
+   135→  APPROVED: [],
+   136→  APPROVED_WITH_COMMENTS: [],
+   137→  REJECTED: [],
+   138→  REVISE_RESUBMIT: ["SUBMITTED"],
+   139→};
+   140→
+   141→// ─── Types ────────────────────────────────────────────────────────────────
+   142→
+   143→interface SubmittalApi {
+   144→  id: string;
+   145→  projectId: string;
+   146→  ref: string;
+   147→  subjectEn: string;
+   148→  subjectAr: string | null;
+   149→  type: SubmittalType;
+   150→  discipline: Discipline;
+   151→  submittedDate: string | null; // ISO yyyy-MM-dd
+   152→  reviewPeriodDays: number;
+   153→  resubmissionNo: number;
+   154→  status: SubmittalStatus;
+   155→  version: number;
+   156→  createdAt: string;
+   157→  updatedAt: string;
+   158→}
+   159→
+   160→interface SubmittalsListResponse {
+   161→  submittals: SubmittalApi[];
+   162→}
+   163→
+   164→interface SubmittalEventApi {
+   165→  id: string;
+   166→  submittalId: string;
+   167→  fromStatus: SubmittalStatus | null;
+   168→  toStatus: SubmittalStatus;
+   169→  note: string | null;
+   170→  eventDate: string;
+   171→  createdByUserId: string;
+   172→  createdAt: string;
+   173→}
+   174→
+   175→interface SubmittalDetailResponse {
+   176→  submittal: SubmittalApi;
+   177→  events: SubmittalEventApi[];
+   178→}
+   179→
+   180→// ─── Component ────────────────────────────────────────────────────────────
+   181→
+   182→export function SubmittalsView() {
+   183→  const t = useTranslations("submittals");
+   184→  const tc = useTranslations("common");
+   185→  const currentProjectId = useUIStore((s) => s.currentProjectId);
+   186→  const setCurrentView = useUIStore((s) => s.setCurrentView);
+   187→  const qc = useQueryClient();
+   188→
+   189→  const [selectedId, setSelectedId] = useState<string | null>(null);
+   190→  const [addOpen, setAddOpen] = useState(false);
+   191→  const [newSubmittal, setNewSubmittal] = useState({
+   192→    subjectEn: "",
+   193→    subjectAr: "",
+   194→    type: "MATERIAL" as SubmittalType,
+   195→    discipline: "ARC" as Discipline,
+   196→    submittedDate: todayIso(),
+   197→    reviewPeriodDays: 14,
+   198→  });
+   199→
+   200→  // Injected clock (BR-DC1) — the UI supplies "today" from the browser.
+   201→  const today = todayIso();
+   202→
+   203→  const { data, isLoading } = useQuery<SubmittalsListResponse>({
+   204→    queryKey: currentProjectId
+   205→      ? queryKeys.submittals.list(currentProjectId)
+   206→      : ["submittals", "list", "_disabled"],
+   207→    queryFn: () =>
+   208→      fetchJson<SubmittalsListResponse>(
+   209→        `/api/projects/${currentProjectId}/submittals`,
+   210→      ),
+   211→    enabled: !!currentProjectId,
+   212→  });
+   213→
+   214→  const submittals = data?.submittals ?? [];
+   215→
+   216→  // Sort submittals by ref ascending for a stable table. Declared BEFORE the
+   217→  // early return below to satisfy the React rules-of-hooks lint rule.
+   218→  const sortedSubmittals = useMemo(
+   219→    () =>
+   220→      [...submittals].sort((a, b) =>
+   221→        a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0,
+   222→      ),
+   223→    [submittals],
+   224→  );
+   225→
+   226→  // Detail (events timeline) for the Sheet drawer.
+   227→  const { data: detailData, isLoading: detailLoading } =
+   228→    useQuery<SubmittalDetailResponse>({
+   229→      queryKey: selectedId
+   230→        ? queryKeys.submittals.detail(selectedId)
+   231→        : ["submittals", "detail", "_disabled"],
+   232→      queryFn: () =>
+   233→        fetchJson<SubmittalDetailResponse>(`/api/submittals/${selectedId}`),
+   234→      enabled: !!selectedId,
+   235→    });
+   236→
+   237→  // Create submittal — ref is auto-generated by the server.
+   238→  const createMutation = useMutation({
+   239→    mutationFn: (vars: {
+   240→      subjectEn: string;
+   241→      subjectAr: string | null;
+   242→      type: SubmittalType;
+   243→      discipline: Discipline;
+   244→      submittedDate: string | null;
+   245→      reviewPeriodDays: number;
+   246→    }) =>
+   247→      apiPost<SubmittalApi>(
+   248→        `/api/projects/${currentProjectId}/submittals`,
+   249→        {
+   250→          projectId: currentProjectId,
+   251→          subjectEn: vars.subjectEn,
+   252→          subjectAr: vars.subjectAr,
+   253→          type: vars.type,
+   254→          discipline: vars.discipline,
+   255→          submittedDate: vars.submittedDate,
+   256→          reviewPeriodDays: vars.reviewPeriodDays,
+   257→          resubmissionNo: 0,
+   258→          status: "DRAFT",
+   259→        },
+   260→      ),
+   261→    onSuccess: () => {
+   262→      if (!currentProjectId) return;
+   263→      qc.invalidateQueries({
+   264→        queryKey: queryKeys.submittals.list(currentProjectId),
+   265→      });
+   266→      qc.invalidateQueries({
+   267→        queryKey: queryKeys.documentsDashboard.detail(currentProjectId),
+   268→      });
+   269→      toast.success("Submittal created");
+   270→      setAddOpen(false);
+   271→      setNewSubmittal({
+   272→        subjectEn: "",
+   273→        subjectAr: "",
+   274→        type: "MATERIAL",
+   275→        discipline: "ARC",
+   276→        submittedDate: todayIso(),
+   277→        reviewPeriodDays: 14,
+   278→      });
+   279→    },
+   280→    onError: (err: Error) => toast.error(err.message),
+   281→  });
+   282→
+   283→  // Change status via POST /api/submittals/[id]/status.
+   284→  const statusChangeMutation = useMutation({
+   285→    mutationFn: (vars: {
+   286→      id: string;
+   287→      toStatus: SubmittalStatus;
+   288→      eventDate: string;
+   289→      expectedVersion: number;
+   290→      note?: string;
+   291→    }) =>
+   292→      apiPost<{ submittal: SubmittalApi; event: SubmittalEventApi }>(
+   293→        `/api/submittals/${vars.id}/status`,
+   294→        {
+   295→          toStatus: vars.toStatus,
+   296→          eventDate: vars.eventDate,
+   297→          expectedVersion: vars.expectedVersion,
+   298→          note: vars.note ?? null,
+   299→        },
+   300→      ),
+   301→    onSuccess: (_data, vars) => {
+   302→      qc.invalidateQueries({
+   303→        queryKey: queryKeys.submittals.detail(vars.id),
+   304→      });
+   305→      if (currentProjectId) {
+   306→        qc.invalidateQueries({
+   307→          queryKey: queryKeys.submittals.list(currentProjectId),
+   308→        });
+   309→        qc.invalidateQueries({
+   310→          queryKey: queryKeys.documentsDashboard.detail(currentProjectId),
+   311→        });
+   312→      }
+   313→      toast.success("Status updated");
+   314→    },
+   315→    onError: (err: Error) => toast.error(err.message),
+   316→  });
+   317→
+   318→  // ─── Empty state: no project selected ──────────────────────────────────
+   319→  if (!currentProjectId) {
+   320→    return (
+   321→      <div className="max-w-6xl mx-auto p-8">
+   322→        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+   323→        <div className="mt-8 rounded-lg border border-border border-dashed p-12 text-center">
+   324→          <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center mx-auto mb-3">
+   325→            <Send className="w-5 h-5 text-muted-foreground" />
+   326→          </div>
+   327→          <p className="text-sm text-muted-foreground mb-4">{t("noProject")}</p>
+   328→          <Button
+   329→            type="button"
+   330→            onClick={() => setCurrentView("projects")}
+   331→            className="bg-primary text-primary-foreground hover:bg-[var(--linear-primary-hover)]"
+   332→          >
+   333→            {t("goToProjects")}
+   334→          </Button>
+   335→        </div>
+   336→      </div>
+   337→    );
+   338→  }
+   339→
+   340→  function submitNewSubmittal() {
+   341→    if (!newSubmittal.subjectEn.trim()) {
+   342→      toast.error("Subject (EN) is required");
+   343→      return;
+   344→    }
+   345→    createMutation.mutate({
+   346→      subjectEn: newSubmittal.subjectEn.trim(),
+   347→      subjectAr: newSubmittal.subjectAr.trim() || null,
+   348→      type: newSubmittal.type,
+   349→      discipline: newSubmittal.discipline,
+   350→      submittedDate: newSubmittal.submittedDate || null,
+   351→      reviewPeriodDays: newSubmittal.reviewPeriodDays,
+   352→    });
+   353→  }
+   354→
+   355→  function changeStatus(s: SubmittalApi, toStatus: SubmittalStatus) {
+   356→    if (!detailData) return;
+   357→    statusChangeMutation.mutate({
+   358→      id: s.id,
+   359→      toStatus,
+   360→      eventDate: today,
+   361→      expectedVersion: detailData.submittal.version,
+   362→    });
+   363→  }
+   364→
+   365→  return (
+   366→    <div className="max-w-6xl mx-auto p-8 space-y-6">
+   367→      {/* Header */}
+   368→      <div className="flex items-end justify-between gap-4">
+   369→        <div>
+   370→          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+   371→          <p className="text-sm text-muted-foreground mt-1">
+   372→            {submittals.length}{" "}
+   373→            {submittals.length === 1 ? "submittal" : "submittals"}
+   374→          </p>
+   375→        </div>
+   376→        <Button
+   377→          type="button"
+   378→          onClick={() => setAddOpen(true)}
+   379→          className="bg-primary text-primary-foreground hover:bg-[var(--linear-primary-hover)] gap-1.5"
+   380→        >
+   381→          <Plus className="w-3.5 h-3.5" />
+   382→          {t("addSubmittal")}
+   383→        </Button>
+   384→      </div>
+   385→
+   386→      {/* Body */}
+   387→      {isLoading ? (
+   388→        <div className="rounded-lg border border-border p-8 text-center text-sm text-muted-foreground">
+   389→          {tc("loading")}
+   390→        </div>
+   391→      ) : sortedSubmittals.length === 0 ? (
+   392→        <div className="rounded-lg border border-border border-dashed p-12 text-center">
+   393→          <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center mx-auto mb-3">
+   394→            <Send className="w-5 h-5 text-muted-foreground" />
+   395→          </div>
+   396→          <h3 className="text-sm font-medium">{t("title")}</h3>
+   397→          <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+   398→            {t("empty")}
+   399→          </p>
+   400→          <Button
+   401→            type="button"
+   402→            onClick={() => setAddOpen(true)}
+   403→            className="mt-4 bg-primary text-primary-foreground hover:bg-[var(--linear-primary-hover)] gap-1.5"
+   404→          >
+   405→            <Plus className="w-3.5 h-3.5" />
+   406→            {t("addSubmittal")}
+   407→          </Button>
+   408→        </div>
+   409→      ) : (
+   410→        <div className="rounded-lg border border-border overflow-hidden">
+   411→          <table className="w-full text-sm">
+   412→            <thead>
+   413→              <tr className="border-b border-border bg-muted/30 text-left">
+   414→                <th className="px-4 py-2 font-medium text-muted-foreground w-24">
+   415→                  {t("ref")}
+   416→                </th>
+   417→                <th className="px-4 py-2 font-medium text-muted-foreground">
+   418→                  {t("subject")}
+   419→                </th>
+   420→                <th className="px-4 py-2 font-medium text-muted-foreground w-24">
+   421→                  {t("type")}
+   422→                </th>
+   423→                <th className="px-4 py-2 font-medium text-muted-foreground w-20">
+   424→                  {t("discipline")}
+   425→                </th>
+   426→                <th className="px-4 py-2 font-medium text-muted-foreground w-28">
+   427→                  {t("submitted")}
+   428→                </th>
+   429→                <th className="px-4 py-2 font-medium text-muted-foreground w-28">
+   430→                  {t("due")}
+   431→                </th>
+   432→                <th className="px-4 py-2 font-medium text-muted-foreground w-32">
+   433→                  {t("status")}
+   434→                </th>
+   435→                <th className="px-4 py-2 font-medium text-muted-foreground w-24">
+   436→                  {t("overdue")}
+   437→                </th>
+   438→                <th className="px-4 py-2 font-medium text-muted-foreground w-12 text-right">
+   439→                  {tc("actions")}
+   440→                </th>
+   441→              </tr>
+   442→            </thead>
+   443→            <tbody>
+   444→              {sortedSubmittals.map((s) => {
+   445→                const overdueState = computeOverdueState(
+   446→                  today,
+   447→                  s.submittedDate,
+   448→                  s.reviewPeriodDays,
+   449→                  s.status,
+   450→                );
+   451→                return (
+   452→                  <tr
+   453→                    key={s.id}
+   454→                    onClick={() => setSelectedId(s.id)}
+   455→                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+   456→                  >
+   457→                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+   458→                      {s.ref}
+   459→                    </td>
+   460→                    <td className="px-4 py-3">
+   461→                      <div className="font-medium truncate">{s.subjectEn}</div>
+   462→                      {s.subjectAr && (
+   463→                        <div
+   464→                          className="text-xs text-muted-foreground truncate"
+   465→                          dir="rtl"
+   466→                        >
+   467→                          {s.subjectAr}
+   468→                        </div>
+   469→                      )}
+   470→                    </td>
+   471→                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+   472→                      {s.type}
+   473→                    </td>
+   474→                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+   475→                      {s.discipline}
+   476→                    </td>
+   477→                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+   478→                      {s.submittedDate ?? "—"}
+   479→                    </td>
+   480→                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+   481→                      {s.submittedDate
+   482→                        ? addDays(s.submittedDate, s.reviewPeriodDays)
+   483→                        : "—"}
+   484→                    </td>
+   485→                    <td className="px-4 py-3">
+   486→                      <SubmittalStatusBadge status={s.status} />
+   487→                    </td>
+   488→                    <td className="px-4 py-3">
+   489→                      <OverdueBadge state={overdueState} />
+   490→                    </td>
+   491→                    <td
+   492→                      className="px-4 py-3 text-right"
+   493→                      onClick={(e) => e.stopPropagation()}
+   494→                    >
+   495→                      {/* Stop row click so the dropdown doesn't double-fire. */}
+   496→                      <StatusChangeMenu
+   497→                        submittal={s}
+   498→                        onChange={(to) => changeStatus(s, to)}
+   499→                        disabled={statusChangeMutation.isPending}
+   500→                      />
+   501→                    </td>
+   502→                  </tr>
+   503→                );
+   504→              })}
+   505→            </tbody>
+   506→          </table>
+   507→        </div>
+   508→      )}
+   509→
+   510→      {/* Create submittal dialog */}
+   511→      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+   512→        <DialogContent className="sm:max-w-[480px]">
+   513→          <DialogHeader>
+   514→            <DialogTitle>{t("addSubmittal")}</DialogTitle>
+   515→            <DialogDescription>{t("empty")}</DialogDescription>
+   516→          </DialogHeader>
+   517→          <div className="space-y-4">
+   518→            <div className="space-y-1.5">
+   519→              <Label htmlFor="sub-subject-en">{t("subjectEn")}</Label>
+   520→              <Input
+   521→                id="sub-subject-en"
+   522→                value={newSubmittal.subjectEn}
+   523→                onChange={(e) =>
+   524→                  setNewSubmittal({ ...newSubmittal, subjectEn: e.target.value })
+   525→                }
+   526→                placeholder="e.g. Concrete mix design — grade C40/50"
+   527→                autoFocus
+   528→              />
+   529→            </div>
+   530→            <div className="space-y-1.5">
+   531→              <Label htmlFor="sub-subject-ar">{t("subjectAr")}</Label>
+   532→              <Input
+   533→                id="sub-subject-ar"
+   534→                value={newSubmittal.subjectAr}
+   535→                onChange={(e) =>
+   536→                  setNewSubmittal({ ...newSubmittal, subjectAr: e.target.value })
+   537→                }
+   538→                dir="rtl"
+   539→              />
+   540→            </div>
+   541→            <div className="grid grid-cols-2 gap-3">
+   542→              <div className="space-y-1.5">
+   543→                <Label htmlFor="sub-type">{t("type")}</Label>
+   544→                <Select
+   545→                  value={newSubmittal.type}
+   546→                  onValueChange={(v) =>
+   547→                    setNewSubmittal({
+   548→                      ...newSubmittal,
+   549→                      type: v as SubmittalType,
+   550→                    })
+   551→                  }
+   552→                >
+   553→                  <SelectTrigger id="sub-type" className="w-full">
+   554→                    <SelectValue />
+   555→                  </SelectTrigger>
+   556→                  <SelectContent>
+   557→                    {SUBMITTAL_TYPES.map((tp) => (
+   558→                      <SelectItem key={tp} value={tp}>
+   559→                        {tp}
+   560→                      </SelectItem>
+   561→                    ))}
+   562→                  </SelectContent>
+   563→                </Select>
+   564→              </div>
+   565→              <div className="space-y-1.5">
+   566→                <Label htmlFor="sub-discipline">{t("discipline")}</Label>
+   567→                <Select
+   568→                  value={newSubmittal.discipline}
+   569→                  onValueChange={(v) =>
+   570→                    setNewSubmittal({
+   571→                      ...newSubmittal,
+   572→                      discipline: v as Discipline,
+   573→                    })
+   574→                  }
+   575→                >
+   576→                  <SelectTrigger id="sub-discipline" className="w-full">
+   577→                    <SelectValue />
+   578→                  </SelectTrigger>
+   579→                  <SelectContent>
+   580→                    {DISCIPLINES.map((d) => (
+   581→                      <SelectItem key={d} value={d}>
+   582→                        {d}
+   583→                      </SelectItem>
+   584→                    ))}
+   585→                  </SelectContent>
+   586→                </Select>
+   587→              </div>
+   588→            </div>
+   589→            <div className="grid grid-cols-2 gap-3">
+   590→              <div className="space-y-1.5">
+   591→                <Label htmlFor="sub-submitted">{t("submitted")}</Label>
+   592→                <Input
+   593→                  id="sub-submitted"
+   594→                  type="date"
+   595→                  value={newSubmittal.submittedDate}
+   596→                  onChange={(e) =>
+   597→                    setNewSubmittal({
+   598→                      ...newSubmittal,
+   599→                      submittedDate: e.target.value,
+   600→                    })
+   601→                  }
+   602→                />
+   603→              </div>
+   604→              <div className="space-y-1.5">
+   605→                <Label htmlFor="sub-review-period">
+   606→                  {t("reviewPeriod")}
+   607→                </Label>
+   608→                <Input
+   609→                  id="sub-review-period"
+   610→                  type="number"
+   611→                  min={0}
+   612→                  value={newSubmittal.reviewPeriodDays}
+   613→                  onChange={(e) =>
+   614→                    setNewSubmittal({
+   615→                      ...newSubmittal,
+   616→                      reviewPeriodDays: Number(e.target.value) || 0,
+   617→                    })
+   618→                  }
+   619→                />
+   620→              </div>
+   621→            </div>
+   622→          </div>
+   623→          <DialogFooter>
+   624→            <Button
+   625→              type="button"
+   626→              variant="ghost"
+   627→              onClick={() => setAddOpen(false)}
+   628→            >
+   629→              {tc("cancel")}
+   630→            </Button>
+   631→            <Button
+   632→              type="button"
+   633→              onClick={submitNewSubmittal}
+   634→              disabled={createMutation.isPending}
+   635→            >
+   636→              {createMutation.isPending ? (
+   637→                <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+   638→              ) : null}
+   639→              {tc("create")}
+   640→            </Button>
+   641→          </DialogFooter>
+   642→        </DialogContent>
+   643→      </Dialog>
+   644→
+   645→      {/* Detail drawer */}
+   646→      <Sheet
+   647→        open={!!selectedId}
+   648→        onOpenChange={(o) => !o && setSelectedId(null)}
+   649→      >
+   650→        <SheetContent
+   651→          side="right"
+   652→          className="w-full sm:max-w-lg overflow-y-auto"
+   653→        >
+   654→          <SheetHeader>
+   655→            <SheetTitle>
+   656→              {detailData?.submittal.ref ?? "—"}
+   657→              <span className="text-muted-foreground font-normal ml-2">
+   658→                · {detailData?.submittal.subjectEn ?? ""}
+   659→              </span>
+   660→            </SheetTitle>
+   661→            <SheetDescription>{t("statusTimeline")}</SheetDescription>
+   662→          </SheetHeader>
+   663→          {selectedId && (
+   664→            <SubmittalDetailBody
+   665→              loading={detailLoading}
+   666→              data={detailData}
+   667→              onChangeStatus={changeStatus}
+   668→              changing={statusChangeMutation.isPending}
+   669→            />
+   670→          )}
+   671→        </SheetContent>
+   672→      </Sheet>
+   673→    </div>
+   674→  );
+   675→}
+   676→
+   677→// ─── Sub-components ───────────────────────────────────────────────────────
+   678→
+   679→function SubmittalDetailBody({
+   680→  loading,
+   681→  data,
+   682→  onChangeStatus,
+   683→  changing,
+   684→}: {
+   685→  loading: boolean;
+   686→  data: SubmittalDetailResponse | undefined;
+   687→  onChangeStatus: (s: SubmittalApi, to: SubmittalStatus) => void;
+   688→  changing: boolean;
+   689→}) {
+   690→  const t = useTranslations("submittals");
+   691→  const tc = useTranslations("common");
+   692→
+   693→  if (loading) {
+   694→    return (
+   695→      <div className="px-4 py-6 text-sm text-muted-foreground">
+   696→        {tc("loading")}
+   697→      </div>
+   698→    );
+   699→  }
+   700→  if (!data) {
+   701→    return <div className="px-4 py-6 text-sm text-muted-foreground">—</div>;
+   702→  }
+   703→
+   704→  const events = [...data.events].sort((a, b) =>
+   705→    a.eventDate < b.eventDate ? 1 : a.eventDate > b.eventDate ? -1 : 0,
+   706→  );
+   707→
+   708→  return (
+   709→    <div className="flex flex-col gap-4 p-4">
+   710→      <section className="space-y-2">
+   711→        <div className="grid grid-cols-2 gap-2 text-xs">
+   712→          <Field label={t("type")} value={data.submittal.type} />
+   713→          <Field label={t("discipline")} value={data.submittal.discipline} />
+   714→          <Field
+   715→            label={t("submitted")}
+   716→            value={data.submittal.submittedDate ?? "—"}
+   717→          />
+   718→          <Field
+   719→            label={t("due")}
+   720→            value={
+   721→              data.submittal.submittedDate
+   722→                ? addDays(
+   723→                    data.submittal.submittedDate,
+   724→                    data.submittal.reviewPeriodDays,
+   725→                  )
+   726→                : "—"
+   727→            }
+   728→          />
+   729→          <Field
+   730→            label={t("reviewPeriod")}
+   731→            value={`${data.submittal.reviewPeriodDays} d`}
+   732→          />
+   733→          <Field
+   734→            label={t("status")}
+   735→            value={<SubmittalStatusBadge status={data.submittal.status} />}
+   736→          />
+   737→        </div>
+   738→      </section>
+   739→
+   740→      <section className="space-y-2">
+   741→        <h3 className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+   742→          {t("changeStatus")}
+   743→        </h3>
+   744→        <StatusChangeMenu
+   745→          submittal={data.submittal}
+   746→          onChange={(to) => onChangeStatus(data.submittal, to)}
+   747→          disabled={changing}
+   748→          fullWidth
+   749→        />
+   750→      </section>
+   751→
+   752→      <section className="space-y-2">
+   753→        <h3 className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+   754→          {t("statusTimeline")}
+   755→        </h3>
+   756→        {events.length === 0 ? (
+   757→          <p className="text-xs text-muted-foreground">{t("noEvents")}</p>
+   758→        ) : (
+   759→          <ul className="space-y-1 text-xs">
+   760→            {events.map((e) => (
+   761→              <li
+   762→                key={e.id}
+   763→                className="flex items-start gap-2 font-mono py-1 border-b border-border/40 last:border-0"
+   764→              >
+   765→                <span className="text-muted-foreground shrink-0">
+   766→                  {e.eventDate}
+   767→                </span>
+   768→                <span className="text-muted-foreground shrink-0">
+   769→                  {e.fromStatus ? humanStatus(e.fromStatus) : "—"} →{" "}
+   770→                  {humanStatus(e.toStatus)}
+   771→                </span>
+   772→                {e.note && (
+   773→                  <span className="text-foreground truncate">{e.note}</span>
+   774→                )}
+   775→              </li>
+   776→            ))}
+   777→          </ul>
+   778→        )}
+   779→      </section>
+   780→    </div>
+   781→  );
+   782→}
+   783→
+   784→function Field({
+   785→  label,
+   786→  value,
+   787→}: {
+   788→  label: string;
+   789→  value: React.ReactNode;
+   790→}) {
+   791→  return (
+   792→    <div className="flex flex-col">
+   793→      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+   794→        {label}
+   795→      </span>
+   796→      <span className="font-mono">{value}</span>
+   797→    </div>
+   798→  );
+   799→}
+   800→
+   801→function StatusChangeMenu({
+   802→  submittal,
+   803→  onChange,
+   804→  disabled,
+   805→  fullWidth,
+   806→}: {
+   807→  submittal: SubmittalApi;
+   808→  onChange: (to: SubmittalStatus) => void;
+   809→  disabled: boolean;
+   810→  fullWidth?: boolean;
+   811→}) {
+   812→  const t = useTranslations("submittals");
+   813→  const allowed = SUBMITTAL_TRANSITIONS[submittal.status] ?? [];
+   814→  return (
+   815→    <DropdownMenu>
+   816→      <DropdownMenuTrigger asChild>
+   817→        <Button
+   818→          type="button"
+   819→          variant="outline"
+   820→          size="sm"
+   821→          disabled={disabled || allowed.length === 0}
+   822→          className={fullWidth ? "w-full justify-between" : "h-7 text-xs"}
+   823→        >
+   824→          {t("changeStatus")}
+   825→          <ArrowRight className="w-3 h-3 ml-1" />
+   826→        </Button>
+   827→      </DropdownMenuTrigger>
+   828→      <DropdownMenuContent align="end">
+   829→        <DropdownMenuLabel>{t("changeStatus")}</DropdownMenuLabel>
+   830→        <DropdownMenuSeparator />
+   831→        {allowed.length === 0 ? (
+   832→          <DropdownMenuItem disabled>
+   833→            <span className="text-muted-foreground">Terminal status</span>
+   834→          </DropdownMenuItem>
+   835→        ) : (
+   836→          allowed.map((to) => (
+   837→            <DropdownMenuItem
+   838→              key={to}
+   839→              onClick={() => onChange(to)}
+   840→            >
+   841→              {humanStatus(to)}
+   842→            </DropdownMenuItem>
+   843→          ))
+   844→        )}
+   845→      </DropdownMenuContent>
+   846→    </DropdownMenu>
+   847→  );
+   848→}
+   849→
+   850→function SubmittalStatusBadge({ status }: { status: SubmittalStatus }) {
+   851→  const colorClass: Record<SubmittalStatus, string> = {
+   852→    DRAFT: "border-transparent bg-muted text-muted-foreground",
+   853→    SUBMITTED:
+   854→      "border-transparent bg-[rgba(96,165,250,0.15)] text-[rgb(96,165,250)]",
+   855→    UNDER_REVIEW:
+   856→      "border-transparent bg-[rgba(251,146,60,0.15)] text-[rgb(251,146,60)]",
+   857→    APPROVED:
+   858→      "border-transparent bg-[rgba(74,222,128,0.15)] text-[rgb(74,222,128)]",
+   859→    APPROVED_WITH_COMMENTS:
+   860→      "border-transparent bg-[rgba(74,222,128,0.10)] text-[rgb(74,222,128)]",
+   861→    REJECTED:
+   862→      "border-transparent bg-[rgba(248,113,113,0.15)] text-[rgb(248,113,113)]",
+   863→    REVISE_RESUBMIT:
+   864→      "border-transparent bg-[rgba(251,146,60,0.10)] text-[rgb(251,146,60)]",
+   865→  };
+   866→  return (
+   867→    <Badge variant="outline" className={colorClass[status]}>
+   868→      {humanStatus(status)}
+   869→    </Badge>
+   870→  );
+   871→}
+   872→
+   873→function OverdueBadge({
+   874→  state,
+   875→}: {
+   876→  state: ReturnType<typeof computeOverdueState>;
+   877→}) {
+   878→  const t = useTranslations("submittals");
+   879→  if (state === "overdue") {
+   880→    return (
+   881→      <Badge
+   882→        variant="outline"
+   883→        className="border-transparent bg-[rgba(248,113,113,0.15)] text-[rgb(248,113,113)]"
+   884→      >
+   885→        <AlertTriangle className="w-3 h-3 mr-1" />
+   886→        {t("overdue")}
+   887→      </Badge>
+   888→    );
+   889→  }
+   890→  if (state === "due-soon") {
+   891→    return (
+   892→      <Badge
+   893→        variant="outline"
+   894→        className="border-transparent bg-[rgba(251,146,60,0.15)] text-[rgb(251,146,60)]"
+   895→      >
+   896→        <Clock className="w-3 h-3 mr-1" />
+   897→        {t("dueSoon")}
+   898→      </Badge>
+   899→    );
+   900→  }
+   901→  return <span className="text-xs text-muted-foreground">—</span>;
+   902→}
+   903→
+   904→// ─── Helpers ───────────────────────────────────────────────────────────────
+   905→
+   906→function humanStatus(s: SubmittalStatus): string {
+   907→  return s
+   908→    .toLowerCase()
+   909→    .replace(/_/g, " ")
+   910→    .replace(/\b\w/g, (c) => c.toUpperCase());
+   911→}
+   912→
+   913→function addDays(iso: string, days: number): string {
+   914→  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+   915→  if (!m) return iso;
+   916→  const [, y, mo, d] = m;
+   917→  const ms = Date.UTC(Number(y), Number(mo) - 1, Number(d));
+   918→  return new Date(ms + days * 86400000)
+   919→    .toISOString()
+   920→    .slice(0, 10);
+   921→}
+   922→
+   923→/**
+   924→ * Compute the overdue state per BR-DC6.
+   925→ *   overdue ⇔ asOf > due AND status is non-final AND status != DRAFT.
+   926→ *   due-soon ⇔ 0 ≤ (due − asOf) ≤ 3 days AND status is non-final AND != DRAFT.
+   927→ *
+   928→ * The caller passes the injected "today" (BR-DC1 — no Date.now() in domain).
+   929→ */
+   930→function computeOverdueState(
+   931→  asOf: string,
+   932→  submittedDate: string | null,
+   933→  reviewPeriodDays: number,
+   934→  status: SubmittalStatus,
+   935→): "overdue" | "due-soon" | "none" {
+   936→  if (submittedDate === null) return "none";
+   937→  if (status === "DRAFT") return "none";
+   938→  if (FINAL_SUBMITTAL_STATUSES.includes(status)) return "none";
+   939→
+   940→  const due = addDays(submittedDate, reviewPeriodDays);
+   941→  const diff = daysBetween(asOf, due);
+   942→  if (diff < 0) return "overdue"; // asOf > due
+   943→  if (diff <= 3) return "due-soon";
+   944→  return "none";
+   945→}
+   946→
+   947→function daysBetween(asOf: string, due: string): number {
+   948→  const a = Date.parse(asOf + "T00:00:00Z");
+   949→  const b = Date.parse(due + "T00:00:00Z");
+   950→  if (Number.isNaN(a) || Number.isNaN(b)) return Number.POSITIVE_INFINITY;
+   951→  return Math.round((b - a) / 86400000);
+   952→}
+   953→
+   954→function todayIso(): string {
+   955→  const d = new Date();
+   956→  const y = d.getUTCFullYear();
+   957→  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+   958→  const day = String(d.getUTCDate()).padStart(2, "0");
+   959→  return `${y}-${m}-${day}`;
+   960→}
+   961→

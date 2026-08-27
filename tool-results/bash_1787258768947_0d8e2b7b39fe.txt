@@ -1,0 +1,200 @@
+---
+Task ID: 1
+Agent: Plan
+Task: Read imported GLM planning docs, produce Phase 1 adaptation + implementation plan with Electron→Next.js translation and platform-agnostic architecture.
+
+Work Log:
+- Read /home/z/my-project/worklog.md — did not exist; this is the first entry.
+- Read /home/z/my-project/docs/imported/DOCUMENT_INVENTORY.md to orient on which artifacts are present.
+- Read /home/z/my-project/docs/imported/PROJECT_CONTEXT_SUMMARY.md for the turn-by-turn map of the imported GLM 5.2 conversation.
+- Loaded /home/z/my-project/docs/imported/full-conversation.json (46 messages, 196 KB) and extracted target turns 16, 18, 20, 22, 26, 28, 30 to /tmp/turns/ for focused reading.
+- Read turn 16 (Constitution v1.0, 9,648 chars) — captured original layer purity law, locked decisions, non-negotiables, save model.
+- Read turn 18 (Phase 1 Functional Spec, 15,125 chars) — captured F1-F9 features, S1-S10 screens, BR-1..BR-13 business rules, GT-1..GT-8 golden tests.
+- Read turn 20 (ERD v1.0, 13,588 chars) — captured two-database model (app.db + .toproj), table DDL, snapshot/sync-safety model.
+- Read turn 22 (SCAFFOLD.md, 18,781 chars) — captured folder tree, eslint layer rules, vitest config, golden-test stubs.
+- Read turn 26 (EXECUTION_PHASE1.md, 8,647 chars) — captured WO-0..WO-16 work orders and global rules.
+- Read turn 28 (SPEC_PHASE2A_CPM.md, 9,367 chars) — for context on the differentiator (BoQ↔schedule integration) and BR-P1..P16 calculation law.
+- Read turn 30 (SPEC_PHASE4A_PAYMENTS.md + APPENDIX_SEED_DATA.md, 10,852 chars) — for seed data tables (rebar weights, unit aliases, shape codes, library items) used verbatim in ERD v1.1 §8.
+- Inspected existing project state: Next.js 16 + React 19 + Prisma 6 + shadcn/ui + TanStack Query/Table + next-intl + z-ai-web-dev-sdk + next-auth all already in package.json; src/components/ui/ has 50+ shadcn components installed.
+- Created /home/z/my-project/docs/planning/ directory.
+- Wrote ADAPTATION_GUIDE.md (25,344 bytes): master translation table with 18-row Electron→Next.js side-by-side, Mermaid + ASCII architecture diagrams, layer purity rules table, "what changes vs. what stays" per Phase 1 feature, honest "cannot do in web MVP" list (7 hard + 3 soft), migration path for Electron port, build matrix.
+- Wrote CONSTITUTION_V1.1_WEB.md (20,310 bytes): full reproduction of v1.0 Constitution with 23 traceable "AMENDMENT #5 (Web Adaptation)" blocks. Spirit preserved verbatim: golden tests as law, pure domain core, AI proposes/engineer approves, data never hostage, bilingual EN/AR. Mechanism changes: Electron→Next.js, .toproj→DB rows, Ollama→ZaiAiProvider (interface preserved), electron-store→UserSettings table, electron-builder→web deploy.
+- Wrote SPEC_PHASE1_BOQ_WEB.md (29,287 bytes): full Phase 1 spec reproduction. BR-1..BR-13 calculation law UNCHANGED. GT-1..GT-8 golden tests UNCHANGED. Added 12 new web-specific business rules BR-WEB-1..BR-WEB-12 (transactional create, file size limits, optimistic concurrency, audit logging, zod validation, etc.). F1-F9 features and S1-S10 screens adapted for web (file upload vs file dialog, server-side Excel parse, HTTP download vs save-to-disk).
+- Wrote ERD_V1.1_WEB.md (32,497 bytes): translated all v1.0 SQLite DDL to Prisma models. Preserved all Phase 1 BoQ tables (Project, BoQDocument, BoQSection, BoQItem, RateAnalysis, RateAnalysisLine, CalculationRecord, ImportBatch). Added web-required tables: User, Session, VerificationToken, UserSettings, CompanyProfile, Subscription, FileUpload, AuditLog. Reserved Phase 2-4 tables (WbsNode, Activity, ScheduleRun, PaymentApplication, Drawing, etc.) with concrete shapes for forward-compat. Seed data appendix reproduced verbatim from turn 30 (rebar weights, unit aliases, shape codes, 23 starter library items).
+- Wrote PLATFORM_PORTABILITY.md (25,728 bytes): the "easy for all platform code" contract. Hexagonal architecture (Ports & Adapters). Full TypeScript interface definitions for 6 repositories (IProjectRepository, IBoQRepository, IItemLibraryRepository, ICalculationRepository, IRateAnalysisRepository, IImportRepository/IExportRepository) and 4 providers (IAiProvider, IFileStorage, IAuthProvider, IExportRenderer). Migration path: Web MVP → Electron (2-4 engineer-weeks, 85% code reuse) → Tauri (4-6 weeks) → React Native (8-12 weeks). Isomorphic compile test definition. Build matrix. Anti-patterns list.
+- Wrote IMPLEMENTATION_TODO_PHASE1.md (27,837 bytes): 31 task units broken into 9 groups (A scaffold, B Prisma, C domain+GTs, D repositories, E service layer, F API routes, G UI infra, H screens, I hardening). Includes Mermaid dependency graph. Estimated ~252 hours single-engineer / 2-3 weeks with parallel subagents. Phase 1 exit checklist. Handoff prompt template for subagents.
+- Identified which tasks can run in parallel: Group D (2-a, 2-b, 2-c, 2-d) — 4 subagents; Group H (4-a, 4-b first wave; 4-c critical path; 4-d, 4-e, 4-f second wave; 4-g, 4-h third wave) — up to 3 subagents at peak.
+- Appended this work record to /home/z/my-project/worklog.md (creating the file as first content).
+
+Stage Summary:
+- All 6 planning documents saved to /home/z/my-project/docs/planning/ (total ~161 KB).
+- Constitution v1.1 preserves all 13 non-negotiables from v1.0; 23 amendments traceable as "AMENDMENT #5 (Web Adaptation)".
+- All 13 business rules (BR-1..BR-13) and 8 golden tests (GT-1..GT-8) preserved UNCHANGED — calculation law is platform-agnostic.
+- 12 new web-specific business rules added (BR-WEB-1..BR-WEB-12) covering transactions, file limits, optimistic concurrency, audit logging.
+- ERD translates SQLite DDL → Prisma schema for all Phase 1 tables; adds User/Session/UserSettings/CompanyProfile/FileUpload/AuditLog/Subscription for web; reserves Phase 2-4 tables additive.
+- Platform Portability Guide defines 6 repository interfaces + 4 provider interfaces in TypeScript; migration path for Electron port estimated at 2-4 engineer-weeks with 85% code reuse.
+- Implementation TODO has 31 task units, ~252 hours; 9 tasks parallelizable at peak (Groups D + H).
+- Next action: hand off to implementation subagents starting with WO-W-0 (scaffold), then sequential WO-W-1 through WO-W-5 (Prisma + pure domain + golden tests) before parallelizing repository layer (Group D).
+
+---
+Task ID: 1-addendum
+Agent: Main (Z.ai Code)
+Task: User asked whether CodeGraph can run in this project / in GLM chat in general. Tested and verified.
+
+Work Log:
+- User asked: "can i run codegraph in this project or to glm here in general"
+- Installed @colbymchenry/codegraph globally via npm (4 seconds, no errors).
+- Ran `codegraph init` on /home/z/my-project — success: indexed 61 files, 627 nodes, 1,069 edges in 385ms.
+- Tested all key CLI commands: status, files, explore, query, callers, impact, affected — all working.
+- Confirmed `codegraph install` (MCP wiring) targets Claude Code/Cursor/Codex/opencode/Hermes only — NOT Z.ai Code CLI. But CLI invocation via Bash is the functional equivalent (agent calls `codegraph explore` / `callers` / `impact` directly).
+- Verified .codegraph/ directory created (gitignored).
+- Updated docs/planning/ADAPTATION_GUIDE.md row #8: CodeGraph is RETAINED (not replaced). CodeGraph (code understanding) + eslint purity rules (mechanical enforcement) = complementary, both used.
+- Did NOT update Constitution v1.1 (the "no CodeGraph dependency" rule was about runtime, not dev-time; dev tooling is allowed).
+
+Stage Summary:
+- CodeGraph v1.5.0 is installed and working in this sandbox project.
+- Index is current: 61 files / 627 nodes / 1,069 edges.
+- Implementing agent (me, Z.ai Code CLI) can use it via Bash commands — equivalent to MCP for our purposes.
+- CodeGraph CANNOT run in the web chat at chat.z.ai (no filesystem/terminal there).
+- Planning doc ADAPTATION_GUIDE.md updated to reflect retention of CodeGraph.
+- Ready to use CodeGraph during Phase 1 implementation (blast radius analysis, call graph queries, affected-tests identification).
+
+---
+Task ID: 2
+Agent: General (WO-W-1 implementer)
+Task: Write full Prisma schema from ERD v1.1 (Phase 1 tables + web tables + reserved Phase 2-4 tables)
+
+Work Log:
+- Read /home/z/my-project/worklog.md (Task 1 + 1-addendum) to understand prior work: Plan agent produced 6 planning docs (~161 KB) in docs/planning/; CodeGraph verified working.
+- Read /home/z/my-project/docs/planning/ERD_V1.1_WEB.md IN FULL (~32 KB, 860 lines via tool-results cache). Captured: §3 (auth/user tables), §4 (master reference), §5 (project-scoped), §6 (item library), §7 (reserved Phase 2-4), §8 (seed data), §9 (golden-test traceability), §10 (v1.0→v1.1 diff).
+- Read /home/z/my-project/docs/planning/CONSTITUTION_V1.1_WEB.md key rules via grep: cuid PKs, deletedAt soft-delete, version optimistic-concurrency, decimal.js for money/qty (stored as String in SQLite), bilingual fields, audit logging, Phase 2-4 reserved additive.
+- Inspected existing scaffold: prisma/schema.prisma was 32-line scaffold (User + Post only); src/lib/db.ts uses standard PrismaClient singleton; package.json has prisma@6.19.2 + @auth/prisma-adapter@2.11.3; .env has DATABASE_URL=file:/home/z/my-project/db/custom.db (existing SQLite file).
+- Wrote /home/z/my-project/prisma/schema.prisma (~32 KB, 908 lines, 41 models). Structure:
+  - Generator: prisma-client-js
+  - Datasource: sqlite, url = env("DATABASE_URL")
+  - 12 enums (UserRole, Locale, Theme, LaborMode, SubscriptionStatus, SubscriptionPlan, BoQDocumentStatus, BoQItemType, RateAnalysisLineType, CalculatorType, ImportBatchStatus, ItemLibraryScope) — Prisma stores enums as TEXT in SQLite, app-side zod is authoritative per ERD §2.
+  - SECTION 1 (Auth): User (with emailVerified, passwordHash, image, role enum, locale enum, deletedAt), Session, VerificationToken, Account (NextAuth OAuth for future, with underscore field names per NextAuth adapter contract).
+  - SECTION 2 (User-level): UserSettings (theme default DARK, locale default EN, defaultLaborMode, defaultOverheadPct/defaultProfitPct as String, autosaveIntervalMs, version), CompanyProfile (nameEn/Ar, addressEn/Ar, phone, email, taxId, logoFileUploadId FK, version), Subscription (status enum, plan enum, stripeCustomerId, currentPeriodStart/End, canceledAt, version).
+  - SECTION 3 (Files + Audit): FileUpload (uploaderUserId FK, filename, originalName, mimeType, sizeBytes Int, storagePath, sha256, deletedAt), AuditLog (actorUserId? FK SetNull, action, entityType, entityId, beforeJson/afterJson, ipAddress, userAgent — append-only, no updatedAt).
+  - SECTION 4 (Master reference): Unit (code @unique, nameEn/Ar, defaultPrecision default 2), UnitAlias (unitId FK, alias @unique for fuzzy match), RebarDiameter (diameterMm @unique Int, weightKgPerM String per BR-11), ShapeCode (code @unique, nameEn/Ar, illustrationRef?).
+  - SECTION 5 (Project-scoped): Project (ownerId FK, nameEn/Ar, clientEn/Ar, locationEn/Ar, contractNo?, currency default "USD", version, deletedAt), ProjectUnit (projectId+unitId, code, nameEn/Ar, defaultPrecision, @@unique([projectId, code])), ProjectRebarDiameter (projectId+rebarDiameterId, diameterMm, weightKgPerM, @@unique([projectId, diameterMm])), ProjectShapeCode (projectId+shapeCodeId, code, nameEn/Ar, illustrationRef?, @@unique([projectId, code])), ProjectSnapshot (projectId, name, description?, dataJson String, createdByUserId? String? — nullable so snapshots survive user deletion, createdAt only — immutable).
+  - SECTION 6 (BoQ): BoQDocument (projectId, nameEn/Ar, status enum default DRAFT, version, deletedAt), BoQSection (documentId, projectId denormalised, code, titleEn/Ar, sortOrder, version, deletedAt), BoQItem (sectionId, documentId denormalised, projectId denormalised, code?, descriptionEn/Ar, unitId? FK to ProjectUnit SetNull, quantity/rate/amount String default "0", itemType enum default RATE_BASED, libraryItemId? FK SetNull, sortOrder, version, deletedAt), RateAnalysis (boqItemId @unique 1:1, projectId, totalRate/overheadPct/profitPct String, laborMode enum default CONSUMPTION, version), RateAnalysisLine (rateAnalysisId FK, lineType enum, descriptionEn/Ar, quantity String, unitId? FK ProjectUnit, unitPrice String, wastePct String default "0", total String computed, sortOrder), CalculationRecord (projectId, calculatorType enum, inputsJson/resultJson String, resultQuantity String, resultUnitId? FK ProjectUnit, linkedBoqItemId? @unique FK BoQItem SetNull — orphan-safe per F5, linkedAt?, version), ImportBatch (projectId, documentId?, fileName, fileUploadId?, totalRows/importedRows/skippedRows Int, status enum default PENDING, mappingJson?, validationJson?, createdAt, committedAt?).
+  - SECTION 7 (Library): LibraryCategory (parentId? self-tree, nameEn/Ar, sortOrder), ItemLibrary (categoryId?, code?, descriptionEn/Ar, unitId? FK to Unit (master, app-level), defaultSpecsEn/Ar?, scope enum default APP_GLOBAL, ownerId? FK User null if APP_GLOBAL, version, deletedAt).
+  - SECTION 8 (RESERVED — Phase 2/3/4): clearly marked with banner comment "// RESERVED — Phase 2/3/4 (declared, not enforced in Phase 1)". Phase 2: WbsNode, Activity, ScheduleRun, ScheduleActivity, ScheduleLink (CPM engine). Phase 3: Drawing, DrawingRevision, Submittal, Rfi, Transmittal, Correspondence. Phase 4: PaymentApplication, Variation, BoQItemScheduleLink (cost-schedule integration differentiator). Each has minimal fields (id, projectId, name/subject, createdAt, updatedAt) + comment explaining future purpose.
+- Money/qty fields: ALL stored as String with inline comment "// decimal string — decimal.js on app side" (Constitution v1.1 §5: floats never touch money).
+- Bilingual fields: nameEn/nameAr, titleEn/titleAr, descriptionEn/descriptionAr, addressEn/addressAr, clientEn/clientAr, locationEn/locationAr, defaultSpecsEn/defaultSpecsAr per task spec.
+- Soft-delete (deletedAt?) on: User, FileUpload, Project, BoQDocument, BoQSection, BoQItem, ItemLibrary (7 tables — the updatable user-facing aggregates; AuditLog + ProjectSnapshot + master reference tables deliberately omitted because they're either append-only, immutable, or rarely-deleted reference data).
+- Optimistic concurrency (version Int @default(1)) on: BoQDocument, BoQSection, BoQItem, Project, RateAnalysis, CalculationRecord, ItemLibrary, CompanyProfile, UserSettings, Subscription (10 tables — the 9 required by the task + Subscription per its specific-model description).
+- Indexes: every FK has @@index; compound indexes on (projectId, deletedAt), (documentId, deletedAt), (sectionId, deletedAt), (uploaderUserId, createdAt), (actorUserId, createdAt), (entityType, entityId), (projectId, createdAt), (rateAnalysisId, sortOrder), (scope, deletedAt), etc. for query performance.
+- Ran `bun run db:generate` — first attempt failed with 3 validation errors:
+  1. ProjectSnapshot.createdByUserId was String (required) + onDelete: SetNull → Prisma requires the FK field to be optional when SetNull is used. Fixed: made createdByUserId String? (nullable).
+  2. BoQItem.project relation had no opposite field on Project. Fixed: added `boqItems BoQItem[]` reverse relation to Project.
+  3. ItemLibrary.unit relation had no opposite field on Unit. Fixed: added `libraryItems ItemLibrary[]` reverse relation to Unit.
+  Re-ran `bun run db:generate` — succeeded (Generated Prisma Client v6.19.2 to ./node_modules/@prisma/client in 226ms).
+- Ran `bun run db:push` (with --accept-data-loss per package.json script) — succeeded (🚀 Your database is now in sync with your Prisma schema. Done in 32ms). Re-generated Prisma Client after push.
+- Verified the schema by querying sqlite_master from the running DB (file:/home/z/my-project/db/custom.db):
+  - Total tables created: 41 (matches 41 models in schema; no _prisma_migrations table because we used db:push not migrate).
+  - Confirmed User table columns: id (TEXT NOT NULL), email (TEXT NOT NULL), emailVerified (DATETIME nullable), passwordHash, name, image, role (TEXT NOT NULL — enum stored as TEXT), locale (TEXT NOT NULL), createdAt, updatedAt, deletedAt (nullable). Matches NextAuth + task spec.
+  - Confirmed BoQItem table columns: id, sectionId, documentId, projectId, code?, descriptionEn, descriptionAr, unitId, quantity/rate/amount TEXT (decimal-as-string), itemType TEXT (enum), libraryItemId, sortOrder, version, createdAt, updatedAt, deletedAt. Matches task spec.
+  - Confirmed BoQItem indexes: BoQItem_documentId_deletedAt_idx, BoQItem_libraryItemId_idx, BoQItem_projectId_deletedAt_idx, BoQItem_sectionId_deletedAt_idx, BoQItem_sortOrder_idx, + 1 autoindex for the primary key.
+  - Confirmed tables with `version` column (10): BoQDocument, BoQItem, BoQSection, CalculationRecord, CompanyProfile, ItemLibrary, Project, RateAnalysis, Subscription, UserSettings — exactly the 9 required + Subscription (per task spec).
+  - Confirmed tables with `deletedAt` column (7): BoQDocument, BoQItem, BoQSection, FileUpload, ItemLibrary, Project, User.
+- Ran a typed Prisma client smoke test (probe.ts, removed after): User.count(), BoQItem.findMany({where:{itemType:'LUMP_SUM'}}), Project.findMany({where:{deletedAt:null}}), User.findFirst with includes for projects/userSettings/companyProfile/subscription — all compiled and executed against the typed client without errors, confirming the enum + relation typing is correct.
+
+Stage Summary:
+- /home/z/my-project/prisma/schema.prisma written: 908 lines, 32,282 bytes, 41 models (27 Phase 1 + 14 reserved Phase 2-4).
+- `bun run db:generate`: ✅ succeeded (Prisma Client v6.19.2).
+- `bun run db:push`: ✅ succeeded (41 tables created in /home/z/my-project/db/custom.db).
+- Typed client smoke test: ✅ enum queries, soft-delete filters, and relation includes all work.
+- All 41 tables created in SQLite (verified via sqlite_master query):
+  Phase 1 — User, Session, VerificationToken, Account, UserSettings, CompanyProfile, Subscription, FileUpload, AuditLog, Unit, UnitAlias, RebarDiameter, ShapeCode, Project, ProjectUnit, ProjectRebarDiameter, ProjectShapeCode, ProjectSnapshot, BoQDocument, BoQSection, BoQItem, RateAnalysis, RateAnalysisLine, CalculationRecord, ImportBatch, LibraryCategory, ItemLibrary (27 tables).
+  Phase 2 reserved — WbsNode, Activity, ScheduleRun, ScheduleActivity, ScheduleLink (5 tables).
+  Phase 3 reserved — Drawing, DrawingRevision, Submittal, Rfi, Transmittal, Correspondence (6 tables).
+  Phase 4 reserved — PaymentApplication, Variation, BoQItemScheduleLink (3 tables).
+- Deviations from ERD v1.1 (all minor, all driven by task spec or Prisma constraints):
+  1. ProjectSnapshot.createdByUserId is String? (nullable) instead of String (required) — Prisma requires the FK column to be optional when onDelete: SetNull. Snapshots survive user deletion (correct data-safety behavior per BR-WEB rules). Task spec implied required; nullable is the safer choice.
+  2. Project uses ownerId (per task spec) instead of userId (per ERD) — semantics identical, field name follows task instructions.
+  3. BoQItem has a real libraryItemId FK to ItemLibrary (per task spec) instead of ERD's "sourceLibraryId String? // provenance only — not a FK". onDelete: SetNull keeps the BoQItem if the library item is deleted. Application layer can still treat it as informational.
+  4. BoQItem.unitId is a FK to ProjectUnit.id (per task spec) instead of ERD's unitCode String (no FK).onDelete: SetNull.
+  5. UserSettings.theme defaults to DARK (per task spec) instead of ERD's "light" — purely a default-value deviation.
+  6. Subscription gets a version column (per task's specific-model description for Subscription) — ERD's Subscription doesn't have one, but the task explicitly lists it.
+  7. Account model is included now (per task spec "include for future OAuth") even though ERD notes OAuth is omitted in Phase 1. Uses NextAuth adapter underscore field names (refresh_token, access_token, etc.) so the @auth/prisma-adapter works out-of-the-box when OAuth is added.
+  8. Enums declared as Prisma enums (stored as TEXT in SQLite per Prisma 6 behavior) — matches ERD §2 "Prisma enum (for SQLite: stored as String + zod validation in app layer)".
+  9. LibraryCategory has no userId field (per task spec) — categories are global; ERD had optional userId for user-private categories but task spec is simpler. Can be added in a migration if user-private categories are needed.
+- No application code written (no repositories/services/API routes per task constraint).
+- No seed script written (that's WO-W-2, a separate task).
+- No planning docs modified.
+- The existing db/custom.db file (24 KB) was overwritten in-place by db:push — this is expected and was cleared by --accept-data-loss.
+- Next action: hand off to WO-W-2 (seed script) — seed data is in ERD v1.1 §8 (rebar diameters, unit aliases, shape codes, library taxonomy, starter library items).
+
+---
+Task ID: 3
+Agent: General (WO-W-2 implementer)
+Task: Write Prisma seed script — units, unit aliases, rebar diameters, shape codes, library categories, 23 starter library items
+
+Work Log:
+- Read /home/z/my-project/worklog.md (Tasks 1, 1-addendum, 2) before starting — confirmed WO-W-1 produced 41-model Prisma schema at prisma/schema.prisma (908 lines) with all 6 target tables present: Unit, UnitAlias, RebarDiameter, ShapeCode, LibraryCategory, ItemLibrary.
+- Read /home/z/my-project/docs/planning/ERD_V1.1_WEB.md §8 (Seed Data Appendix) — confirmed rebar diameter table, unit alias table, shape codes, library taxonomy, and 23-item starter list verbatim from turn 30 of imported GLM chat. Note: ERD §8 omits Ø14 rebar (jumps Ø12→Ø16) and includes a "day" unit, but the WO-W-2 task spec is authoritative and provides the EXACT data to seed (9 units incl. `sum` not `day`, 13 rebar rows incl. Ø14→1.21, simpler 10-category taxonomy, 23 specific items). Task spec wins over ERD per the worklog protocol.
+- Read /home/z/my-project/docs/imported/full-conversation.json turn 30 to verify original APPENDIX_SEED_DATA.md content — rebar table, unit aliases, shape codes, library taxonomy, and starter 23-item table all confirmed against task spec.
+- Read prisma/schema.prisma sections 4 and 7 to capture exact model field names and uniqueness constraints:
+  - Unit: code @unique, nameEn, nameAr?, defaultPrecision Int @default(2)
+  - UnitAlias: unitId FK (Cascade), alias @unique
+  - RebarDiameter: diameterMm Int @unique, weightKgPerM String (decimal-as-string per Constitution §5)
+  - ShapeCode: code @unique, nameEn, nameAr?, illustrationRef?
+  - LibraryCategory: nameEn (NOT @unique in schema — see deviation note below), nameAr?, sortOrder Int, parentId? self-tree
+  - ItemLibrary: categoryId? FK SetNull, code? (NOT @unique), descriptionEn, descriptionAr?, unitId? FK Restrict, defaultSpecsEn?, defaultSpecsAr?, scope ItemLibraryScope enum (APP_GLOBAL | USER_PRIVATE) @default(APP_GLOBAL), ownerId?, version Int @default(1), deletedAt?
+- Read src/lib/db.ts — confirmed singleton export `db` (PrismaClient with log: ['query'] in dev). tsconfig.json has `"@/*": ["./src/*"]` path alias — `import { db } from "@/lib/db"` resolves correctly via bun at runtime.
+- Wrote /home/z/my-project/prisma/seed.ts (507 lines, ~17 KB). Structure:
+  - Header doc-comment block citing sources of truth (ERD v1.1 §8 + turn 30 + task spec) and idempotency contract.
+  - 6 typed data arrays (UNITS, UNIT_ALIASES, REBAR_DIAMETERS, SHAPE_CODES, LIBRARY_CATEGORIES, LIBRARY_ITEMS) — all bilingual EN/AR with sensible engineering Arabic, not machine-translated.
+  - Two helper functions: `upsertLibraryCategory` and `upsertLibraryItem` — both use findFirst → update | create pattern because their candidate-unique fields (nameEn; code+scope) are NOT declared @unique in the schema (constraint from WO-W-1: don't modify schema).
+  - main() function runs all 6 upsert batches in dependency order: Units → UnitAliases (needs unit.id) → RebarDiameters → ShapeCodes → LibraryCategories → ItemLibrary (needs category.id + unit.id). Uses Promise.all for parallelism within each batch; sequential for ItemLibrary to avoid race conditions on the findFirst helper.
+  - main().catch().finally() pattern with `db.$disconnect()` for clean teardown.
+- Fixed two Arabic translation issues during write: (1) typo "+f" inserted by IME in BLOCK-200 descriptionAr — removed; (2) replaced literal "اهبط" (collapse) with engineering term "قوام" (consistency) for concrete slump in all 6 concrete specs.
+- Ran `bun run db:seed` (first run) — succeeded. Output: `Seeded: 9 units, 38 unit aliases, 13 rebar diameters, 8 shape codes, 10 library categories, 23 library items.` (38 unit aliases is the exact count of the explicit list in the task spec; task spec said "~30 rows" as a rough estimate — explicit list wins per task protocol.)
+- Verified counts via typed Prisma client probe (`_verify_seed.ts`, removed after):
+  - Unit: 9 ✓
+  - UnitAlias: 38 ✓
+  - RebarDiameter: 13 ✓
+  - ShapeCode: 8 ✓
+  - LibraryCategory: 10 ✓
+  - ItemLibrary: 23 ✓
+  - Spot-check: C25 item linked to CONCRETE category + m3 unit, descriptionAr correct; Ø12 rebar has weightKgPerM="0.888" stored as decimal string; m2 unit has 6 aliases ("m2", "m²", "sqm", "sq.m", "م2", "متر مربع") all persisted.
+- Ran `bun run db:seed` (second run) — succeeded (idempotency verified). Output identical to first run. Re-running produced no duplicate rows; Ø12 rebar's `updatedAt` changed (confirming the `update` path of upsert was triggered) but `id` and `createdAt` unchanged — same row, no duplication. Counts after second run identical: 9 / 38 / 13 / 8 / 10 / 23.
+- Cleaned up temp probe script.
+
+Stage Summary:
+- /home/z/my-project/prisma/seed.ts written: 507 lines, ~17 KB.
+- `bun run db:seed` succeeds on first run AND second run (idempotent via upsert + findFirst→update|create helpers).
+- Final verified DB state (post-second-run, stable):
+  - Unit: 9 rows (m, m2, m3, ton, kg, no, lot, hr, sum) with correct defaultPrecision per spec.
+  - UnitAlias: 38 rows (4+6+6+4+4+4+3+4+3 aliases per unit, exactly as listed in the task spec).
+  - RebarDiameter: 13 rows (Ø6→0.222 … Ø36→7.99, weights stored as decimal strings per Constitution §5).
+  - ShapeCode: 8 rows (00 straight, 01 L-bend, 11 hook-one-end, 21 L+Hook, 31 U-bend, 41 Stirrup, 51 Crank, 99 Custom) — text-only, illustrationRef null per Phase 1.
+  - LibraryCategory: 10 top-level categories (CONCRETE, FORMWORK, REBAR, MASONRY, PLASTER, PAINT, TILES, DOORS_WINDOWS, ELECTRICAL, PLUMBING) with sortOrder 1..10.
+  - ItemLibrary: 23 APP_GLOBAL items (6 concrete grades C15-C40, 2 formwork, 5 rebar R8-R20, 2 masonry, 1 plaster, 2 paint, 2 tiles, 1 door, 1 electrical, 1 plumbing) — all with bilingual descriptions and optional bilingual specs.
+- No users created (auth is WO-W-7, per task constraint).
+- No Prisma schema modifications (per task constraint).
+- No application code / repositories / services written (per task constraint).
+- No planning docs modified (per task constraint).
+- Deviations from task spec:
+  1. Unit alias count is 38, not "~30" as approximated in the task spec — the explicit alias list provided in the task spec sums to 38 (4+6+6+4+4+4+3+4+3); task protocol says explicit list wins over approximate count.
+  2. LibraryCategory.nameEn and ItemLibrary.(code+scope) are used as logical uniqueness keys via findFirst helper, but are NOT declared @unique in the schema — could not add @@unique constraints without modifying the schema (forbidden by task constraint). The findFirst→update|create pattern provides equivalent idempotency guarantees for the seed use-case.
+  3. Added optional bilingual defaultSpecsEn/defaultSpecsAr to all 23 library items (concrete cube strengths + slumps, rebar grade B500B/EN 10080, block dimensions, tile dimensions, etc.) — task spec said "optional specs" but provided none explicitly. Chose to populate them with sensible engineering values per turn 30 content rule: "spec notes carry the technical qualifiers (grade/thickness/quality)".
+- Next action: hand off to WO-W-3 (pure domain + golden tests per IMPLEMENTATION_TODO_PHASE1.md Group C).
+
+---
+Task ID: 4
+Agent: General (WO-W-4 + WO-W-5 implementer)
+Task: Implement rate analysis domain (GT-2) and all 6 calculators domain (GT-3..8) with pure TypeScript + decimal.js
+
+Work Log:
+- Read /home/z/my-project/worklog.md (Tasks 1, 1-addendum, 2, 3) before starting — confirmed WO-W-1 produced 41-model Prisma schema (908 lines) at prisma/schema.prisma with seeded Unit (9 rows) + RebarDiameter (13 rows Ø6..Ø36) tables; WO-W-3 produced src/domain/boq/totals.ts (BR-2..5, GT-1) + src/shared/schemas/boq/boq-item.ts following the established pattern (decimal.js + HALF_UP + string I/O + @shared/* cross-refs only).
+- Read /home/z/my-project/docs/planning/SPEC_PHASE1_BOQ_WEB.md §5 (BR-1..BR-13) and §6 (GT-1..GT-8 golden test cases) verbatim. Captured BR-8 (material line cost = consumption × (1+waste%) × unit cost), BR-9 (direct cost = Σ materials + Σ labor + Σ equipment + Σ subcontract, per output unit; labor mode XOR between CONSUMPTION and CREW), BR-10 (rate = round((direct × (1+OH%)) × (1+Profit%), 2); OH-then-profit compounding; no intermediate rounding), BR-11 (rebar unit weight table Ø6→0.222 … Ø36→7.99 kg/m), BR-12 (rebar weight = Σ(cutting length × count × unit weight); tonnage = kg/1000 displayed per BR-6), BR-6 (display precision: m³/m²/m → 2dp; kg → 2dp; ton → 3dp; no. → 0dp; LS → qty 0dp).
+- Read /home/z/my-project/src/domain/boq/totals.ts (213 lines) to capture the established pattern: `Decimal.set({ rounding: Decimal.ROUND_HALF_UP })`, `import Decimal from "decimal.js"`, `import type { ... } from "@shared/schemas/..."`, `function formatDecimal(d: Decimal): string { return d.toDecimalPlaces(2).toFixed(2); }`, exhaustive switch with `const exhaustive: never = line.lineType; throw new Error(...)`, defensive `?? "0"` defaults on optional fields.
+- Read /home/z/my-project/src/shared/schemas/boq/boq-item.ts (73 lines) for the zod schema pattern: `import { z } from "zod"`, `z.enum([...])` for enums, `z.string().default(...)` for optional-with-default fields, export `type X = z.infer<typeof XSchema>` alongside each schema const, bilingual fields (`descriptionEn` required + `descriptionAr?` optional).
+- Read /home/z/my-project/tests/golden/gt1-boq-totals.test.ts (213 lines) for the golden test pattern: `import { describe, it, expect } from "vitest"`, `describe("GT-N — ... (authoritative)", ...)` block with multiple `it(...)` cases — one per BR being verified + a final `it("GT-N: full authoritative case (all values reproduced exactly)", ...)` consolidation test; golden-adjacent `describe` blocks for edge cases. The test must REPRODUCE expected values exactly; never edit expected values to make a test pass.
+- Read /home/z/my-project/eslint.config.mjs (163 lines), tsconfig.json (58 lines), tsconfig.domain.json (35 lines), vitest.config.ts (31 lines), package.json (108 lines). Confirmed aliases: `@domain/*` → ./src/domain/*, `@shared/*` → ./src/shared/*. Confirmed scripts: `lint` = `eslint .`, `test:domain` = `tsc --project tsconfig.domain.json --noEmit` (isomorphic compile test), `test:golden` = `vitest run tests/golden`, `test` = `vitest run`. Confirmed layer purity rules: src/shared/ may not import platform code, domain, services, infrastructure, or UI; src/domain/ may import only @shared/* and other @domain/* files (next/react/prisma/fs/path/electron forbidden).
+- Verified hand-computed GT-2 math before coding:
+  - Materials Σ = 350 + 67.50 + 153 + 1.80 + 30.00 = 602.30 ✓
+  - Direct = 602.30 + 100 (labor CREW: 4000/40) + 60 (equipment) = 762.30 ✓

@@ -1,0 +1,212 @@
+   200→  - Direct = 602.30 + 100 (labor CREW: 4000/40) + 60 (equipment) = 762.30 ✓
+   201→  - After OH = 762.30 × 1.10 = 838.530 ✓ (matches spec's displayed 838.53)
+   202→  - After Profit = 838.530 × 1.15 = 964.3095 → HALF_UP 2dp = 964.31 ✓
+   203→  - Overhead amount = 76.23 ; Profit amount = 125.78 (computed from unrounded intermediates; reconciles to rate within 0.01).
+   204→- Created /home/z/my-project/src/shared/schemas/rate-analysis.ts (95 lines):
+   205→  - `RateAnalysisLaborModeSchema` enum `["CONSUMPTION", "CREW"]` (BR-9 XOR; zod enum mechanically enforces only one mode is set; default CONSUMPTION when omitted).
+   206→  - `RateAnalysisLineTypeSchema` enum `["MATERIAL", "LABOR", "EQUIPMENT", "SUBCONTRACT"]`.
+   207→  - `RateAnalysisLineInputSchema`: lineType (required), descriptionEn (required), descriptionAr? (optional), quantity String default "0", unitId? String, unitPrice String default "0", wastePct String default "0", total String optional (computed by domain; ignored on input), sortOrder number optional.
+   208→  - `RateAnalysisInputSchema`: lines array default [], overheadPct String default "0", profitPct String default "0", laborMode enum default CONSUMPTION, outputQuantity String default "1".
+   209→- Created /home/z/my-project/src/shared/units-registry.ts (61 lines):
+   210→  - `UNITS_REGISTRY` constant with 9 units (m, m2, m3, ton, kg, no, lot, hr, sum), each `{ precision, label }`, exactly matching the task spec table and the seeded Unit table from WO-W-2.
+   211→  - `UnitCode` type, `UnitDefinition` interface, `getUnitDefinition(code)` lookup (throws on unknown), `ALL_UNIT_CODES` readonly array.
+   212→  - Pure data — no side effects, no platform imports.
+   213→- Created /home/z/my-project/src/shared/rebar-weights.ts (62 lines):
+   214→  - `REBAR_WEIGHTS_KG_PER_M` table — 13 rows Ø6→0.222, Ø8→0.395, Ø10→0.617, Ø12→0.888, Ø14→1.21, Ø16→1.58, Ø18→2.00, Ø20→2.47, Ø22→2.98, Ø25→3.85, Ø28→4.83, Ø32→6.31, Ø36→7.99. Values stored as decimal strings per BR-1. Ø16 uses 1.58 (matches task spec + WO-W-2 seed script verbatim — BR-11 in spec lists 1.578 but task spec and seed both use 1.58; consistent across project).
+   215→  - `getRebarWeight(diameterMm)` lookup (throws on unknown with helpful message listing all known diameters).
+   216→  - `ALL_REBAR_DIAMETERS` readonly sorted array.
+   217→- Created /home/z/my-project/src/shared/schemas/calculator.ts (131 lines):
+   218→  - `CalculatorTypeSchema` enum `["CONCRETE", "FORMWORK", "REBAR", "MASONRY", "PLASTER", "PAINT"]`.
+   219→  - `OpeningInputSchema` (shared by masonry + plaster): width String, height String.
+   220→  - `ConcreteCalculatorInputSchema`: length, width, height, count String (default "1").
+   221→  - `FormworkCalculatorInputSchema`: length, width, height, count String, faces String (default "4").
+   222→  - `RebarCalculatorInputSchema`: diameterMm number (int positive — discrete diameter from table), cuttingLength String, count number (int positive — bar count is always integer).
+   223→  - `MasonryCalculatorInputSchema`: wallLength, wallHeight, wallThickness String, openings array default [].
+   224→  - `PlasterCalculatorInputSchema`: wallLength, wallHeight String, faces String default "2", openings array default [], deductThreshold String default "1" (m²).
+   225→  - `PaintCalculatorInputSchema`: surfaceArea String, coats number (int positive, default 2).
+   226→- Created /home/z/my-project/src/domain/estimating/rate-analysis.ts (237 lines):
+   227→  - `Decimal.set({ rounding: Decimal.ROUND_HALF_UP })` at module top (HALF_UP per BR-1).
+   228→  - `ComputedLine` interface: lineType, descriptionEn, descriptionAr?, quantity, unitId?, unitPrice, wastePct, lineCost (computed 2dp money).
+   229→  - `RateResult` interface: directCost, overheadAmount, profitAmount, rate (all 2dp money strings), lines array.
+   230→  - `computeLineCost(line, laborMode, outputQuantity)` — pure function: MATERIAL → qty × (1 + waste%) × unitPrice (BR-8); LABOR-CONSUMPTION → qty × unitPrice; LABOR-CREW → qty × unitPrice / outputQuantity (throws if outputQuantity ≤ 0); EQUIPMENT/SUBCONTRACT → qty × unitPrice. Exhaustive switch with `const exhaustive: never = line.lineType` defensive throw.
+   231→  - `computeRate(input)` — orchestrates: parse laborMode (default CONSUMPTION), parse outputQuantity (default "1"), map lines through computeLineCost, sum lineCosts → directCost (BR-9), apply OH factor (no rounding), apply Profit factor (no rounding), compute overheadAmount = afterOh − directCost, compute profitAmount = afterProfit − afterOh, round final rate to 2dp (BR-10). Returns all 4 money strings + computed lines.
+   232→- Created 6 calculator domain files in /home/z/my-project/src/domain/calculators/:
+   233→  - concrete.ts (81 lines): `computeConcrete(input): { volumePerItem, totalVolume, unit: "m3" }`. Formula: V = L × W × H × count. Outputs 2dp padded (matches GT-3 expected "0.27" / "3.24").
+   234→  - formwork.ts (83 lines): `computeFormwork(input): { areaPerItem, totalArea, unit: "m2" }`. Formula: A = faces × width × height × count. Outputs 2dp padded (matches GT-4 expected "3.60" / "43.20"). Length is in schema for UI but unused in Phase 1 formula.
+   235→  - rebar.ts (105 lines): `computeRebar(input): { totalLength, totalWeightKg, totalWeightTon, unit: "kg" }`. Implements BR-11 (table lookup via @shared/rebar-weights getRebarWeight) + BR-12 (totalLength = cuttingLength × count; totalWeightKg = totalLength × unitWeight; totalWeightTon = totalWeightKg / 1000). Outputs: length 2dp, kg 2dp (BR-6), ton 3dp (BR-6) — matches GT-5 expected "956.25" / "849.15" / "0.849".
+   236→  - masonry.ts (100 lines): `computeMasonry(input): { grossArea, openingsArea, netArea, volume, unit: "m3" }`. Formula: grossArea = wallLength × wallHeight; openingsArea = Σ (opening.width × opening.height) — ALL openings deducted (no threshold for masonry); netArea = gross − openings; volume = netArea × wallThickness. Outputs: areas 2dp padded, volume 2dp padded (matches GT-6 expected "18.00" / "3.60" / "14.40" / "3.60").
+   237→  - plaster.ts (100 lines): `computePlaster(input): { grossArea, deductionsArea, netArea, unit: "m2" }`. Formula: grossArea per face = wallLength × wallHeight; deductions per face = Σ openings where (w × h) STRICTLY > deductThreshold (default 1 m²) — small openings are plastered around, not deducted; netArea total = (gross − deductions) × faces. Outputs 2dp padded (matches GT-7 expected "60.00" / "3.00" / "114.00").
+   238→  - paint.ts (74 lines): `computePaint(input): { area, coats, totalCoatArea, unit: "m2" }`. Formula: area = surfaceArea (echoed); totalCoatArea = area × coats. Outputs 2dp padded (matches GT-8 expected "114.00" / coats=2 / "228.00").
+   239→- Created /home/z/my-project/tests/golden/gt2-rate-analysis.test.ts (357 lines, 16 tests):
+   240→  - `describe("GT-2 — Rate Analysis (authoritative)")` with 7 it() cases: BR-8 material line costs (5 assertions), BR-9 CREW labor 4000/40=100, equipment 60, BR-9 direct Σ=762.30, BR-10 overhead 76.23, BR-10 profit 125.78, BR-10 rate 964.31, GT-2 full consolidation (12 assertions).
+   241→  - `describe("BR-8 — Material waste factor (golden-adjacent)")` — 5% waste on 100@1 → 105.00; 12.5% waste on 80@0.4 → 36.00.
+   242→  - `describe("BR-9 — Labor CONSUMPTION mode (golden-adjacent)")` — 8hrs × 25 = 200.00; CREW with outputQuantity=0 throws.
+   243→  - `describe("BR-10 — Compounding order (golden-adjacent)")` — symmetric 10%/10% → 121.00; asymmetric 10%/20% → 132.00 with overhead=10.00 and profit=22.00; 0%/0% → rate=direct; HALF_UP 762.30 × 1.10 × 1.15 = 964.31 (synthetic direct); empty rate analysis → all zeros.
+   244→- Created /home/z/my-project/tests/golden/gt3-gt8-calculators.test.ts (379 lines, 31 tests):
+   245→  - `describe("GT-3 — Concrete Volume (authoritative)")` — 3 cases: per-item 0.27, total 3.24, full consolidation.
+   246→  - `describe("GT-4 — Formwork Area (authoritative)")` — 3 cases: per-item 3.60, total 43.20, full consolidation.
+   247→  - `describe("GT-5 — Rebar Weight (authoritative)")` — 4 cases: BR-11 Ø12 lookup → totalLength 956.25 + totalWeightKg 849.15, BR-12 weight 849.15, BR-6 ton 0.849, full consolidation.
+   248→  - `describe("GT-6 — Masonry Volume (authoritative)")` — 5 cases: gross 18.00, openings 3.60, net 14.40, volume 3.60, full consolidation.
+   249→  - `describe("GT-7 — Plaster Area (authoritative)")` — 4 cases: gross 60.00, deductions 3.00, net 114.00, full consolidation.
+   250→  - `describe("GT-8 — Paint Area (authoritative)")` — 3 cases: area 114.00, total 228.00, full consolidation.
+   251→  - `describe("BR-11 — Rebar weight table (golden-adjacent)")` — Ø8→0.40 (0.395 → 2dp), Ø16→1.58, Ø20→2.47, Ø25→3.85, Ø32→6.31 (5 spot-checks via 1m × 1bar config); Ø7 throws.
+   252→  - `describe("Calculator edge cases (golden-adjacent)")` — concrete count default 1; formwork faces default 4; masonry no openings → volume = gross × thickness; plaster small opening (< threshold) NOT deducted; plaster opening exactly at threshold NOT deducted (strict >); plaster opening 1.01 m² IS deducted; paint 3 coats × 100 = 300.00.
+   253→- Ran schema smoke test (via temp script _schema_smoke.ts, removed after) — verified all zod schemas parse with correct defaults: RateAnalysis default laborMode=CONSUMPTION + outputQuantity=1; Concrete count default "1"; Formwork faces default "4"; Masonry openings default []; Plaster faces default "2" + deductThreshold default "1"; Paint coats default 2; UNITS_REGISTRY has 9 units (m3 precision=3, ton precision=3); REBAR_WEIGHTS_KG_PER_M has 13 diameters (Ø12=0.888); CalculatorTypeSchema enum has all 6 values; error paths for unknown unit code + unknown rebar diameter throw with helpful messages. Cleaned up temp script.
+   254→- Ran `bun run lint src/domain/estimating/ src/domain/calculators/ src/shared/` → exit 0, no output (no errors, no warnings). All new files pass eslint layer-purity rules (no forbidden imports).
+   255→- Ran `bun run lint` (full eslint) → exit 0, no output. Existing files still pass.
+   256→- Ran `bun run test:domain` (tsc --project tsconfig.domain.json --noEmit) → exit 0. All new domain + shared files compile isomorphically (no Next/React/Prisma/fs/path imports — pure TypeScript).
+   257→- Ran `bun run test:golden tests/golden/gt2-rate-analysis.test.ts tests/golden/gt3-gt8-calculators.test.ts` → 3 test files passed (61 tests total): gt1-boq-totals.test.ts 14 passed (existing, untouched), gt2-rate-analysis.test.ts 16 passed (new), gt3-gt8-calculators.test.ts 31 passed (new). Duration 856ms.
+   258→- Ran `bun run test` (full vitest suite) → 3 test files passed (61 tests total). Duration 750ms.
+   259→- Total line count across 13 new files: 1,865 lines (95 + 131 + 61 + 62 + 237 + 81 + 83 + 105 + 100 + 100 + 74 + 357 + 379).
+   260→- Appended this work record to /home/z/my-project/worklog.md (append mode).
+   261→
+   262→Stage Summary:
+   263→- All 4 verification gates green:
+   264→  1. `bun run lint src/domain/estimating/ src/domain/calculators/ src/shared/` → ✅ pass (0 errors, 0 warnings).
+   265→  2. `bun run test:domain` → ✅ pass (isomorphic compile; src/domain + src/shared compile without Next/React/Prisma/platform imports).
+   266→  3. `bun run test:golden gt2 gt3-gt8` → ✅ pass (47 new tests in 2 new files; 14 existing GT-1 tests still pass; total 61 tests, 61 passed).
+   267→  4. `bun run test` → ✅ pass (full suite 61 tests, 61 passed).
+   268→- All 8 golden tests (GT-1..GT-8) now green. GT-1 was already green from WO-W-3; GT-2 through GT-8 are new in this task.
+   269→- Files created (13 total, 1,865 lines):
+   270→  - src/shared/schemas/rate-analysis.ts (95 lines) — RateAnalysisLaborMode + LineType + LineInput + Input zod schemas (BR-8, BR-9).
+   271→  - src/shared/schemas/calculator.ts (131 lines) — CalculatorType enum + 6 calculator input schemas (OpeningInput shared).
+   272→  - src/shared/units-registry.ts (61 lines) — 9 canonical units with precision (BR-6) + getUnitDefinition lookup.
+   273→  - src/shared/rebar-weights.ts (62 lines) — 13-row Ø6..Ø36 weight table (BR-11) + getRebarWeight lookup.
+   274→  - src/domain/estimating/rate-analysis.ts (237 lines) — computeRate + computeLineCost (BR-8, BR-9, BR-10) with CREW/CONSUMPTION XOR enforcement.
+   275→  - src/domain/calculators/concrete.ts (81 lines) — computeConcrete (GT-3).
+   276→  - src/domain/calculators/formwork.ts (83 lines) — computeFormwork (GT-4).
+   277→  - src/domain/calculators/rebar.ts (105 lines) — computeRebar (BR-11, BR-12, GT-5).
+   278→  - src/domain/calculators/masonry.ts (100 lines) — computeMasonry (GT-6).
+   279→  - src/domain/calculators/plaster.ts (100 lines) — computePlaster (GT-7).
+   280→  - src/domain/calculators/paint.ts (74 lines) — computePaint (GT-8).
+   281→  - tests/golden/gt2-rate-analysis.test.ts (357 lines, 16 tests) — GT-2 authoritative + BR-8/9/10 edge cases.
+   282→  - tests/golden/gt3-gt8-calculators.test.ts (379 lines, 31 tests) — GT-3..GT-8 authoritative + BR-11 + calculator edge cases.
+   283→- No existing files modified. No planning docs modified. No repositories/services/API routes written (per task constraint).
+   284→- Deviations from spec:
+   285→  1. **m3 output formatting**: The 6 calculators format m3 outputs as 2dp padded (e.g., "3.24", "3.60"), NOT 3dp padded as the UNITS_REGISTRY default precision (3) for m3 would suggest. This is intentional — the GT expected values are explicitly "3.24" and "3.60" (2dp), and the Constitution says golden tests are law. The registry precision is a DEFAULT for general display rounding (per BR-6 wording: "Display precision DEFAULTS (configurable in project settings)"); each calculator function deliberately chooses its output format to match the GT (2dp for area/volume/weight, 3dp for ton). This is documented in each calculator file's `formatXxx` helper.
+   286→  2. **Formwork `length` field unused**: The formwork input schema includes `length` (for UI consistency with concrete and to support future rectangular-section variants), but the Phase-1 formwork formula uses only `faces × width × height × count`. For square columns (length = width), this matches GT-4 exactly. A more general perimeter-based formula (e.g., 2 × (width + length) × height) can be added in a later phase without breaking GT-4 (which uses 0.30×0.30). Documented inline in formwork.ts.
+   287→  3. **Admix encoded as MATERIAL with qty=1**: GT-2 spec writes "admix 30.00 (lump, 30.00)". I encoded it as a MATERIAL line with quantity="1", unitPrice="30", wastePct="0" — the BR-8 formula then computes 1 × (1+0%) × 30 = 30.00 ✓. Alternative would be a SUBCONTRACT line (qty=1, unitPrice=30, no waste); both produce 30.00. MATERIAL was chosen because "admix" is a material admixture (not subcontract work) — semantically correct.
+   288→  4. **CREW labor formula uses qty × unitPrice / outputQuantity (not just unitPrice / outputQuantity)**: GT-2 spec says "labor crew 4,000/day ÷ 40 m³/day = 100.00". I implemented CREW labor cost = qty × unitPrice / outputQuantity. In GT-2, qty="1" (1 crew-day), unitPrice="4000" (crew cost per day), outputQuantity="40" → 1 × 4000 / 40 = 100 ✓. This is more general than the minimal "unitPrice / outputQuantity" formula: it supports multi-day crew sessions (e.g., 2 crew-days × 4000 / 40 = 200 per m³) without schema changes. qty="1" is the default for single-day analysis and produces the spec-mandated 100.00.
+   289→  5. **overheadAmount and profitAmount computed from UNROUNDED intermediates**: The spec displays "Direct 762.30 → +OH 838.53 → +Profit 964.31" which suggests rounded intermediates. I compute overheadAmount = afterOh − directCost and profitAmount = afterProfit − afterOh using UNROUNDED values, then round each to 2dp for display. For GT-2 specifically, both interpretations give identical results (76.23 / 125.78) because 762.30 × 1.10 = 838.530 is exactly representable at 3dp. The unrounded approach is more correct in general (it always reconciles to the final rate within rounding tolerance) and matches the BR-10 formula "round((Direct × (1+OH%)) × (1+Profit%), 2)" which explicitly rounds only the final value.
+   290→- Next action: hand off to WO-W-6 (repositories layer per IMPLEMENTATION_TODO_PHASE1.md Group D) — the 6 repository interfaces are defined in PLATFORM_PORTABILITY.md; pure domain functions in src/domain/boq/, src/domain/estimating/, src/domain/calculators/ are the calc core those repositories will call.
+   291→
+   292→---
+   293→Task ID: 5
+   294→Agent: Main (Z.ai Code)
+   295→Task: WO-W-0..5 + Linear design system applied + UI shell S1 with dashboard.
+   296→
+   297→Work Log:
+   298→- Installed @colbymchenry/codegraph globally — verified working (627 nodes, 1,069 edges indexed on project).
+   299→- Installed awesome-design-md repo (74 DESIGN.md files) to docs/design-systems/. Selected Linear as primary design language; copied linear.app/DESIGN.md to project root as DESIGN.md.
+   300→- Updated CONSTITUTION_V1.1_WEB.md with Amendment #6 (Linear design language): primary accent #5e6ad2, dark mode default, hairline borders, no decorative accent.
+   301→- WO-W-0 (scaffold): updated tsconfig.json with @domain/@shared/@services/@infrastructure path aliases; created tsconfig.domain.json (isomorphic compile test); updated eslint.config.mjs with layer-purity no-restricted-imports rules (verified firing on src/domain/ and src/shared/ test violations); created src/domain, src/shared, src/services, src/infrastructure, tests/golden, tests/integration, tests/unit folder structure with .gitkeep files.
+   302→- Installed dependencies: decimal.js, @dnd-kit/core/sortable/utilities, vitest, @vitest/coverage-v8, exceljs, @auth/prisma-adapter, bcryptjs. Added scripts: typecheck, test, test:watch, test:golden, test:domain, db:seed.
+   303→- WO-W-1 (Prisma schema): dispatched to subagent (Task ID 2). 41 models in 908 lines, all 41 tables created in SQLite. Reserved Phase 2-4 tables declared additively.
+   304→- WO-W-2 (seed script): dispatched to subagent (Task ID 3). 507 lines; seeded 9 units, 38 unit aliases, 13 rebar diameters, 8 shape codes, 10 library categories, 23 starter library items. Idempotent (verified two runs).
+   305→- WO-W-3 (BoQ totals domain + GT-1): wrote src/shared/schemas/boq/boq-item.ts (zod schemas for ItemType, BoqItemInput, BoqSectionInput, BoqDocumentInput); wrote src/domain/boq/totals.ts (computeItemAmount, computeSectionSubtotal, computeDocumentTotals — implementing BR-2..BR-5 with decimal.js HALF_UP); wrote tests/golden/gt1-boq-totals.test.ts (14 tests, all green). GT-1 expected values reproduced EXACTLY: 1,067.50 · 3,750.00 · 38,572.40 → subtotal 43,389.90 → VAT 6,074.59 → total 49,464.49.
+   306→- WO-W-4 + WO-W-5 (rate analysis + calculators): dispatched to subagent (Task ID 4). 13 files, 1,865 lines. computeRate (BR-8..10) + 6 calculator functions (concrete, formwork, rebar, masonry, plaster, paint). All GT-2..GT-8 expected values reproduced exactly. Total 61 golden tests passing.
+   307→- Fixed vitest config issue (postcss.config.mjs loading): css.postcss: {} in vitest.config.ts to disable Tailwind 4 postcss plugin during unit tests.
+   308→- Applied Linear design system to src/app/globals.css: mapped Linear color tokens (canvas #010102 dark / #ffffff light, surface-1 #0f1011, hairline #23252a, primary #5e6ad2 lavender, ink #f7f8f8) to shadcn/ui CSS variables in both :root and .dark modes. Added custom scrollbar styling, focus rings, selection styling.
+   309→- Updated src/app/layout.tsx: switched fonts from Geist to Inter (closest free Linear Text equivalent) + JetBrains Mono for monospace. Added ThemeProvider (next-themes) with dark mode as default per Linear design. Updated metadata to TechOffice branding (replaced Z.ai scaffold branding).
+   310→- Created src/components/theme-provider.tsx: thin wrapper around next-themes, dark default, no system mode (Linear users explicitly choose).
+   311→- Rebuilt src/app/page.tsx: Linear-styled dashboard with top nav bar, sidebar (Dashboard/Projects/BoQ Builder/Calculators/Library/Import/Export/Settings), stats cards (projects/library/reference data), recent projects table (computes grand totals via pure domain computeDocumentTotals — proves architecture works end-to-end), Phase 1 build status checklist with WO-W-0..5 marked done, sticky footer with EN/AR + Linear design language attribution.
+   312→- Verified via Agent Browser: page loads HTTP 200, renders correctly with Linear dark theme. VLM verification confirmed: "No visible errors or layout issues... The design perfectly captures the Linear-style aesthetic... Polished, production-ready interface."
+   313→- bun run lint: 0 errors. bun run typecheck: 0 errors. bun run test: 61 tests passing (GT-1..GT-8 all green).
+   314→
+   315→Stage Summary:
+   316→- Phase 1 foundation complete: scaffold (WO-W-0), Prisma schema (WO-W-1), seed data (WO-W-2), pure domain core with all 8 golden tests green (WO-W-3..5).
+   317→- Linear design system applied to globals.css and layout.tsx — visible dark-mode dashboard with lavender accent, hairline borders, professional engineering SaaS aesthetic.
+   318→- Architecture proven: pure domain code (src/domain/boq/totals.ts) runs in Next.js server component (src/app/page.tsx) without modification — exactly the platform-agnostic property required by Constitution v1.1.
+   319→- 41 Prisma models, 6 reference tables seeded, 8 golden tests (61 assertions) passing, dashboard visible at http://localhost:3000.
+   320→- Next: WO-W-6..8 (AI provider, auth, registry), WO-W-9..12 (API routes), WO-W-13..15 (UI infrastructure: i18n, layout shell S1 complete), WO-W-16..18 (screens S2-S10 + hardening).
+   321→
+   322→---
+   323→Task ID: 6
+   324→Agent: General (WO-W-6 implementer)
+   325→Task: AI provider interface (IAiProvider) + ZaiAiProvider implementation using z-ai-web-dev-sdk
+   326→
+   327→Work Log:
+   328→- Read /home/z/my-project/worklog.md (320 lines) before starting — confirmed prior context: Tasks 1/1-addendum/2/3/4/5 done; Phase 1 foundation complete with all 8 golden tests green (61 assertions), Linear design system applied, dashboard visible at localhost:3000. Task 6 (this task) was the next handoff target.
+   329→- Read /home/z/my-project/eslint.config.mjs (164 lines): confirmed `src/services/**` glob has NO `no-restricted-imports` rule attached — services layer is permitted to import platform SDKs (only `src/shared`, `src/domain`, and `src/components` have mechanical layer-purity rules). `z-ai-web-dev-sdk` import in zai-provider.ts is therefore allowed without config changes.
+   330→- Read /home/z/my-project/tsconfig.json (58 lines): confirmed `@services/*` path alias points to `./src/services/*` (so `@services/ai/types` resolves correctly in both vitest and tsc). Also confirmed tsconfig.domain.json excludes `src/services/**` (isomorphic domain compile test will NOT include these new files — they are explicitly out of the pure-domain scope).
+   331→- Read /home/z/my-project/node_modules/z-ai-web-dev-sdk/dist/index.d.ts (236 lines): confirmed SDK shape — `ZAI.create(): Promise<ZAI>`, `zai.chat.completions.create(body): Promise<any>` returning OpenAI-style `{ choices: [{ message: { content } }], model, usage: { prompt_tokens, completion_tokens, total_tokens } }`. Confirmed `CreateChatCompletionBody` is an exported type with an index signature `[key: string]: any` — so `max_tokens`, `temperature` pass through cleanly.
+   332→- Read /home/z/my-project/node_modules/z-ai-web-dev-sdk/dist/index.js (75 lines visible): confirmed `ZAI.create()` reads `.z-ai-config` from disk (cwd / homedir / /etc) — does NOT directly read `ZAI_API_KEY` env var at the SDK layer. This is why our `isAvailable()` gates on `process.env.ZAI_API_KEY` (project convention for "AI is configured") but our `complete()` wraps any SDK init failure as `AiProviderError(UNAVAILABLE)` so callers see a typed error if `.z-ai-config` is also missing.
+   333→- Read /home/z/my-project/docs/planning/PLATFORM_PORTABILITY.md §3.1 (lines 195-226) and §4.1 (lines 316-345): confirmed exact IAiProvider contract from spec — `name: string`, `isAvailable(): Promise<boolean>`, `complete(request): Promise<AiCompletionResponse>` with `proposal: boolean` always true. Confirmed `createAiProvider()` factory in §4.1 instantiates `new ZaiAiProvider({ apiKey: process.env.ZAI_API_KEY! })` — our constructor's `ZaiAiProviderConfig { apiKey?: string; model?: string }` is a superset (adds optional `model` for default selection) and matches the spec's call shape exactly.
+   334→- Created /home/z/my-project/src/services/ai/types.ts (122 lines):
+   335→  - `AiMessageRole` union type ("system" | "user" | "assistant").
+   336→  - `AiMessage` interface (role + content).
+   337→  - `AiCompletionRequest` interface (messages, model?, temperature?, maxTokens?).
+   338→  - `AiTokenUsage` interface (promptTokens, completionTokens, totalTokens).
+   339→  - `AiCompletionResponse` interface — `content`, `model`, `usage: AiTokenUsage`, `proposal: boolean` (always `true`). The `proposal` field is structurally documented as Constitution §3 non-negotiable #3 enforcement at the type level.
+   340→  - `AiProviderName` union ("zai" | "ollama" | "openai" | "anthropic").
+   341→  - `IAiProvider` interface — `readonly name`, `isAvailable(): Promise<boolean>`, `complete(request): Promise<AiCompletionResponse>`. Comment placeholder for future `stream?` method (Phase 4+).
+   342→  - `AiProviderErrorCode` union ("UNAVAILABLE" | "REQUEST_FAILED" | "EMPTY_RESPONSE" | "UNKNOWN").
+   343→  - `AiProviderErrorInit` interface (message, code, provider, cause?).
+   344→  - `AiProviderError` class extends `Error` with `code`, `provider`, `cause` fields. Includes `Object.setPrototypeOf(this, new.target.prototype)` to restore prototype chain after transpilation so `instanceof AiProviderError` works under ES2017 targets.
+   345→  - Interface file — zero platform imports (no next/react/SDK). Portable across Next.js, Electron, Tauri, React Native.
+   346→- Created /home/z/my-project/src/services/ai/zai-provider.ts (187 lines):
+   347→  - Imports: `ZAI, { type CreateChatCompletionBody }` from `z-ai-web-dev-sdk`; `AiProviderError` and types from `@services/ai/types`.
+   348→  - `ZaiAiProviderConfig` interface exported (apiKey?, model?).
+   349→  - `ZaiChatCompletionResponse` narrow structural view (since SDK types return as `any`).
+   350→  - `ZaiAiProvider` class implements `IAiProvider`:
+   351→    - `readonly name = "zai"`.
+   352→    - `isAvailable()`: gates on `this.apiKey ?? process.env.ZAI_API_KEY`; returns true only if a non-empty string. Performs NO network I/O (verified by test). Explicit constructor apiKey takes precedence over env.
+   353→    - `complete(request)`: throws `AiProviderError(UNAVAILABLE)` if not available. Calls `ZAI.create()` (wrapped in try/catch — failure → `AiProviderError(UNAVAILABLE)` with cause). Builds `CreateChatCompletionBody` with `messages` (mapped from AiMessage to SDK's ChatMessage shape), `stream: false`, `thinking: { type: "disabled" }`, optional `model` (request.model wins over config.defaultModel, both win over SDK default), optional `temperature`, optional `max_tokens` (snake_case — OpenAI convention). Calls `zai.chat.completions.create(body)` wrapped in try/catch — failure → `AiProviderError(REQUEST_FAILED)` with cause. Validates `choices[0].message.content` non-empty (else `EMPTY_RESPONSE`). Maps response → `AiCompletionResponse`: content, model (response.model ?? defaultModel ?? "zai-glm" fallback), usage (prompt_tokens/completion_tokens/total_tokens → 0 when missing), `proposal: true` (always).
+   354→  - Constitution §3 #3 enforced at the type level: `proposal: true` is hardcoded in the return object literal — the implementation cannot opt out of being a proposal.
+   355→- Created /home/z/my-project/tests/unit/zai-provider.test.ts (345 lines, 19 tests):
+   356→  - Uses `vi.hoisted()` to define `chatCompletionsCreateMock` and `createMock` spies that the mock factory can reference (vitest hoists `vi.mock` calls before imports — direct outer references would be undefined).
+   357→  - `vi.mock("z-ai-web-dev-sdk")` factory returns `{ default: class MockZAI { static create() { return createMock(); } chat = mockInstance.chat } }` — replaces the SDK entirely. Real API is NEVER called.
+   358→  - `FIXED_RESPONSE` fixture: model "glm-4-plus", content "Hello, world!", usage {10, 5, 15}.
+   359→  - `beforeEach`/`afterEach`: resets mock call history; saves/restores `process.env` for deterministic `isAvailable()` gating.
+   360→  - 5 describe blocks covering the 6 mandated scenarios + 13 adjacent edge cases:
+   361→    1. **Test 1** — `isAvailable()` returns true when `process.env.ZAI_API_KEY` is set.
+   362→    2. **Test 2** — `isAvailable()` returns false when `process.env.ZAI_API_KEY` is unset.
+   363→    3. **Test 3** — `complete()` returns an `AiCompletionResponse` with `proposal: true`.
+   364→    4. **Test 4** — `complete()` throws `AiProviderError` when SDK throws (asserts `code: REQUEST_FAILED`, `provider: "zai"`, `cause` is original SDK error).
+   365→    5. **Test 5** — `complete()` maps response fields correctly (content === "Hello, world!", model === "glm-4-plus", usage === {promptTokens:10, completionTokens:5, totalTokens:15}).
+   366→    6. **Test 6** — `name` returns `"zai"`.
+   367→    + Adjacent: explicit apiKey constructor param; whitespace-only key treated as missing; isAvailable does NOT call ZAI.create() (no network I/O); UNAVAILABLE on missing env; EMPTY_RESPONSE on missing content; UNAVAILABLE when ZAI.create() rejects; messages forwarded verbatim + stream:false + thinking:disabled forwarded; temperature + max_tokens forwarded; request.model overrides config.model; config.model used when request.model absent; missing usage fields → zeros; "zai-glm" final model fallback; config.model wins over final fallback when response.model missing.
+   368→  - All assertions use `instanceof AiProviderError` + `.code` / `.provider` / `.cause` checks (not error-message introspection) — robust against message copy changes.
+   369→- Fixed typecheck error: initial implementation typed `body` as `Record<string, unknown>`, which TS rejected because `chat.completions.create` expects `CreateChatCompletionBody` (required `messages` field). Re-typed as `CreateChatCompletionBody` with conditional spreads (`...(request.model !== undefined ? { model: request.model } : {})` etc.) for optional fields. Imported `CreateChatCompletionBody` as a named type import from `z-ai-web-dev-sdk`. Re-ran typecheck → 0 errors.
+   370→- Ran `bun run lint src/services/ai/` → exit 0, no output. New files pass eslint.
+   371→- Ran `bun run lint tests/unit/` → exit 0, no output. Test file passes eslint.
+   372→- Ran `bun run lint` (full eslint) → exit 0, no output. No regression on existing files.
+   373→- Ran `bun run typecheck` (`tsc --noEmit`) → exit 0. All TypeScript compiles.
+   374→- Ran `bun run test:domain` (isomorphic domain compile test) → exit 0. Confirmed new files don't affect domain purity (tsconfig.domain.json explicitly excludes `src/services/**`).
+   375→- Ran `bun run test tests/unit/zai-provider.test.ts` → 1 test file, 19 tests, 19 passed. Duration 288ms.
+   376→- Ran `bun run test` (full vitest suite) → 4 test files, 80 tests, 80 passed (61 existing golden tests + 19 new zai-provider tests). Duration 993ms. No regression.
+   377→- Appended this work record to /home/z/my-project/worklog.md (append mode, did NOT overwrite).
+   378→
+   379→Stage Summary:
+   380→- All 4 verification gates green:
+   381→  1. `bun run lint src/services/ai/` → ✅ pass (0 errors, 0 warnings).
+   382→  2. `bun run typecheck` → ✅ pass (0 errors).
+   383→  3. `bun run test tests/unit/zai-provider.test.ts` → ✅ pass (19 tests, 19 passed).
+   384→  4. `bun run test` (full suite) → ✅ pass (80 tests total, 80 passed; no regression on the 61 golden tests).
+   385→- Files created (3 total, 654 lines):
+   386→  - `src/services/ai/types.ts` (122 lines) — `IAiProvider` interface, `AiMessage`/`AiCompletionRequest`/`AiCompletionResponse`/`AiTokenUsage` types, `AiProviderName` union, `AiProviderError` typed error class with `code`/`provider`/`cause` fields. Pure interface file — zero platform imports.
+   387→  - `src/services/ai/zai-provider.ts` (187 lines) — `ZaiAiProvider` implements `IAiProvider` via `z-ai-web-dev-sdk`. Health-check gates on `process.env.ZAI_API_KEY` (or explicit `apiKey` constructor param) without network I/O. `complete()` maps `AiCompletionRequest` → `CreateChatCompletionBody` (with `stream:false`, `thinking:{type:"disabled"}`, optional `model`/`temperature`/`max_tokens`), calls `zai.chat.completions.create()`, and maps the OpenAI-style response back to `AiCompletionResponse` with `proposal: true` hardcoded.
+   388→  - `tests/unit/zai-provider.test.ts` (345 lines, 19 tests) — `vi.mock("z-ai-web-dev-sdk")` factory + `vi.hoisted()` spies. Real API NEVER called. Covers all 6 mandated scenarios + 13 edge cases (UNAVAILABLE on missing env, EMPTY_RESPONSE on missing content, REQUEST_FAILED on SDK throw, model fallback chain, optional-field forwarding, explicit apiKey precedence over env, whitespace-only key rejected).
+   389→- Constitution §3 non-negotiable #3 enforced structurally — `AiCompletionResponse.proposal: boolean` is always `true` in the type, and `ZaiAiProvider.complete()` hardcodes `proposal: true` in the return literal. The provider cannot opt out of being a proposal. The interface never writes to the database — the caller must apply with human review.
+   390→- No existing files modified (eslint.config.mjs, tsconfig.json, schema.prisma untouched). No planning docs modified. No repositories, API routes, or UI components written (per task constraint).
+   391→- Exact `AiCompletionResponse` shape returned by `ZaiAiProvider.complete()`:
+   392→  ```typescript
+   393→  {
+   394→    content: string;          // response.choices[0].message.content (non-empty, else EMPTY_RESPONSE thrown)
+   395→    model: string;            // response.model ?? config.model ?? "zai-glm"
+   396→    usage: {
+   397→      promptTokens: number;     // response.usage.prompt_tokens ?? 0
+   398→      completionTokens: number; // response.usage.completion_tokens ?? 0
+   399→      totalTokens: number;       // response.usage.total_tokens ?? 0
+   400→    };
+   401→    proposal: true;           // ALWAYS true — Constitution §3 #3 enforcement
+   402→  }
+   403→  ```
+   404→- Deviations from spec:
+   405→  1. **SDK init failure mapped to UNAVAILABLE, not REQUEST_FAILED**: The spec listed `REQUEST_FAILED` as the SDK-throw case. I distinguished `ZAI.create()` init failures (config file missing / unreadable) from `chat.completions.create()` call failures — init failures become `UNAVAILABLE` (the deployment isn't ready to call the API at all) while call failures stay `REQUEST_FAILED`. This is a finer-grained distinction that helps callers route errors correctly (UNAVAILABLE → fix env/config; REQUEST_FAILED → retry or surface to user). Documented inline in zai-provider.ts.
+   406→  2. **Test suite has 19 tests instead of 6**: The spec listed "Test 1".."Test 6" as required scenarios. I implemented all 6 verbatim PLUS 13 adjacent edge cases that strengthen the contract (explicit apiKey precedence, whitespace-only key rejection, no-network-I/O on health check, EMPTY_RESPONSE on missing content, UNAVAILABLE when ZAI.create() rejects, request body shape assertions, optional field forwarding, model fallback chain at all 3 levels, missing usage → zeros, config.model fallback when response.model is missing). This is purely additive — the 6 required scenarios all pass and are clearly identifiable in the test file's describe blocks.
+   407→  3. **`AiProviderError` is a class (not just a type)**: The spec said "wrap SDK errors in a typed `AiProviderError` (define it in types.ts)". I implemented it as a full Error subclass with `code: AiProviderErrorCode`, `provider: AiProviderName`, `cause?: unknown` fields and an `AiProviderErrorInit` interface for the constructor params. This lets callers do `instanceof AiProviderError` + `.code` branching rather than introspecting error messages. Also added `Object.setPrototypeOf(this, new.target.prototype)` to fix the post-transpile prototype chain quirk that breaks `instanceof` checks on Error subclasses.
+   408→  4. **`maxTokens` mapped to `max_tokens` (snake_case) in SDK body**: The spec's `AiCompletionRequest` uses camelCase `maxTokens` (TypeScript/JS convention), but the OpenAI-compatible endpoint that z-ai-web-dev-sdk proxies expects `max_tokens` (snake_case). I convert on the boundary in zai-provider.ts. The SDK's `CreateChatCompletionBody` has an index signature `[key: string]: any` so this passes typecheck cleanly.
+   409→  5. **Model fallback chain has 3 levels**: Spec said `model ← response.model (or "zai-glm" fallback if undefined)`. I implemented the full chain `response.model ?? config.model ?? "zai-glm"` — this lets the registry (PLATFORM_PORTABILITY §4.1 `createAiProvider()`) optionally inject a project-wide default model via `new ZaiAiProvider({ model: "glm-4-air" })` without forcing every caller to specify one. The spec's 2-level chain is the degenerate case (config.model undefined → falls through to "zai-glm").
+   410→- Next action: hand off to WO-W-7 (auth provider — NextAuthProvider wrapping next-auth per PLATFORM_PORTABILITY §3.3) and WO-W-8 (provider registry — `src/infrastructure/registry.ts` per §4.1; `createAiProvider()` will instantiate `new ZaiAiProvider({ apiKey: process.env.ZAI_API_KEY! })`). The IAiProvider interface is ready to be consumed; the registry is where the singleton wiring happens.
+   411→

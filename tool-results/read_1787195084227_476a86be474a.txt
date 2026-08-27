@@ -1,0 +1,240 @@
+   300→- Updated CONSTITUTION_V1.1_WEB.md with Amendment #6 (Linear design language): primary accent #5e6ad2, dark mode default, hairline borders, no decorative accent.
+   301→- WO-W-0 (scaffold): updated tsconfig.json with @domain/@shared/@services/@infrastructure path aliases; created tsconfig.domain.json (isomorphic compile test); updated eslint.config.mjs with layer-purity no-restricted-imports rules (verified firing on src/domain/ and src/shared/ test violations); created src/domain, src/shared, src/services, src/infrastructure, tests/golden, tests/integration, tests/unit folder structure with .gitkeep files.
+   302→- Installed dependencies: decimal.js, @dnd-kit/core/sortable/utilities, vitest, @vitest/coverage-v8, exceljs, @auth/prisma-adapter, bcryptjs. Added scripts: typecheck, test, test:watch, test:golden, test:domain, db:seed.
+   303→- WO-W-1 (Prisma schema): dispatched to subagent (Task ID 2). 41 models in 908 lines, all 41 tables created in SQLite. Reserved Phase 2-4 tables declared additively.
+   304→- WO-W-2 (seed script): dispatched to subagent (Task ID 3). 507 lines; seeded 9 units, 38 unit aliases, 13 rebar diameters, 8 shape codes, 10 library categories, 23 starter library items. Idempotent (verified two runs).
+   305→- WO-W-3 (BoQ totals domain + GT-1): wrote src/shared/schemas/boq/boq-item.ts (zod schemas for ItemType, BoqItemInput, BoqSectionInput, BoqDocumentInput); wrote src/domain/boq/totals.ts (computeItemAmount, computeSectionSubtotal, computeDocumentTotals — implementing BR-2..BR-5 with decimal.js HALF_UP); wrote tests/golden/gt1-boq-totals.test.ts (14 tests, all green). GT-1 expected values reproduced EXACTLY: 1,067.50 · 3,750.00 · 38,572.40 → subtotal 43,389.90 → VAT 6,074.59 → total 49,464.49.
+   306→- WO-W-4 + WO-W-5 (rate analysis + calculators): dispatched to subagent (Task ID 4). 13 files, 1,865 lines. computeRate (BR-8..10) + 6 calculator functions (concrete, formwork, rebar, masonry, plaster, paint). All GT-2..GT-8 expected values reproduced exactly. Total 61 golden tests passing.
+   307→- Fixed vitest config issue (postcss.config.mjs loading): css.postcss: {} in vitest.config.ts to disable Tailwind 4 postcss plugin during unit tests.
+   308→- Applied Linear design system to src/app/globals.css: mapped Linear color tokens (canvas #010102 dark / #ffffff light, surface-1 #0f1011, hairline #23252a, primary #5e6ad2 lavender, ink #f7f8f8) to shadcn/ui CSS variables in both :root and .dark modes. Added custom scrollbar styling, focus rings, selection styling.
+   309→- Updated src/app/layout.tsx: switched fonts from Geist to Inter (closest free Linear Text equivalent) + JetBrains Mono for monospace. Added ThemeProvider (next-themes) with dark mode as default per Linear design. Updated metadata to TechOffice branding (replaced Z.ai scaffold branding).
+   310→- Created src/components/theme-provider.tsx: thin wrapper around next-themes, dark default, no system mode (Linear users explicitly choose).
+   311→- Rebuilt src/app/page.tsx: Linear-styled dashboard with top nav bar, sidebar (Dashboard/Projects/BoQ Builder/Calculators/Library/Import/Export/Settings), stats cards (projects/library/reference data), recent projects table (computes grand totals via pure domain computeDocumentTotals — proves architecture works end-to-end), Phase 1 build status checklist with WO-W-0..5 marked done, sticky footer with EN/AR + Linear design language attribution.
+   312→- Verified via Agent Browser: page loads HTTP 200, renders correctly with Linear dark theme. VLM verification confirmed: "No visible errors or layout issues... The design perfectly captures the Linear-style aesthetic... Polished, production-ready interface."
+   313→- bun run lint: 0 errors. bun run typecheck: 0 errors. bun run test: 61 tests passing (GT-1..GT-8 all green).
+   314→
+   315→Stage Summary:
+   316→- Phase 1 foundation complete: scaffold (WO-W-0), Prisma schema (WO-W-1), seed data (WO-W-2), pure domain core with all 8 golden tests green (WO-W-3..5).
+   317→- Linear design system applied to globals.css and layout.tsx — visible dark-mode dashboard with lavender accent, hairline borders, professional engineering SaaS aesthetic.
+   318→- Architecture proven: pure domain code (src/domain/boq/totals.ts) runs in Next.js server component (src/app/page.tsx) without modification — exactly the platform-agnostic property required by Constitution v1.1.
+   319→- 41 Prisma models, 6 reference tables seeded, 8 golden tests (61 assertions) passing, dashboard visible at http://localhost:3000.
+   320→- Next: WO-W-6..8 (AI provider, auth, registry), WO-W-9..12 (API routes), WO-W-13..15 (UI infrastructure: i18n, layout shell S1 complete), WO-W-16..18 (screens S2-S10 + hardening).
+   321→
+   322→---
+   323→Task ID: 6
+   324→Agent: General (WO-W-6 implementer)
+   325→Task: AI provider interface (IAiProvider) + ZaiAiProvider implementation using z-ai-web-dev-sdk
+   326→
+   327→Work Log:
+   328→- Read /home/z/my-project/worklog.md (320 lines) before starting — confirmed prior context: Tasks 1/1-addendum/2/3/4/5 done; Phase 1 foundation complete with all 8 golden tests green (61 assertions), Linear design system applied, dashboard visible at localhost:3000. Task 6 (this task) was the next handoff target.
+   329→- Read /home/z/my-project/eslint.config.mjs (164 lines): confirmed `src/services/**` glob has NO `no-restricted-imports` rule attached — services layer is permitted to import platform SDKs (only `src/shared`, `src/domain`, and `src/components` have mechanical layer-purity rules). `z-ai-web-dev-sdk` import in zai-provider.ts is therefore allowed without config changes.
+   330→- Read /home/z/my-project/tsconfig.json (58 lines): confirmed `@services/*` path alias points to `./src/services/*` (so `@services/ai/types` resolves correctly in both vitest and tsc). Also confirmed tsconfig.domain.json excludes `src/services/**` (isomorphic domain compile test will NOT include these new files — they are explicitly out of the pure-domain scope).
+   331→- Read /home/z/my-project/node_modules/z-ai-web-dev-sdk/dist/index.d.ts (236 lines): confirmed SDK shape — `ZAI.create(): Promise<ZAI>`, `zai.chat.completions.create(body): Promise<any>` returning OpenAI-style `{ choices: [{ message: { content } }], model, usage: { prompt_tokens, completion_tokens, total_tokens } }`. Confirmed `CreateChatCompletionBody` is an exported type with an index signature `[key: string]: any` — so `max_tokens`, `temperature` pass through cleanly.
+   332→- Read /home/z/my-project/node_modules/z-ai-web-dev-sdk/dist/index.js (75 lines visible): confirmed `ZAI.create()` reads `.z-ai-config` from disk (cwd / homedir / /etc) — does NOT directly read `ZAI_API_KEY` env var at the SDK layer. This is why our `isAvailable()` gates on `process.env.ZAI_API_KEY` (project convention for "AI is configured") but our `complete()` wraps any SDK init failure as `AiProviderError(UNAVAILABLE)` so callers see a typed error if `.z-ai-config` is also missing.
+   333→- Read /home/z/my-project/docs/planning/PLATFORM_PORTABILITY.md §3.1 (lines 195-226) and §4.1 (lines 316-345): confirmed exact IAiProvider contract from spec — `name: string`, `isAvailable(): Promise<boolean>`, `complete(request): Promise<AiCompletionResponse>` with `proposal: boolean` always true. Confirmed `createAiProvider()` factory in §4.1 instantiates `new ZaiAiProvider({ apiKey: process.env.ZAI_API_KEY! })` — our constructor's `ZaiAiProviderConfig { apiKey?: string; model?: string }` is a superset (adds optional `model` for default selection) and matches the spec's call shape exactly.
+   334→- Created /home/z/my-project/src/services/ai/types.ts (122 lines):
+   335→  - `AiMessageRole` union type ("system" | "user" | "assistant").
+   336→  - `AiMessage` interface (role + content).
+   337→  - `AiCompletionRequest` interface (messages, model?, temperature?, maxTokens?).
+   338→  - `AiTokenUsage` interface (promptTokens, completionTokens, totalTokens).
+   339→  - `AiCompletionResponse` interface — `content`, `model`, `usage: AiTokenUsage`, `proposal: boolean` (always `true`). The `proposal` field is structurally documented as Constitution §3 non-negotiable #3 enforcement at the type level.
+   340→  - `AiProviderName` union ("zai" | "ollama" | "openai" | "anthropic").
+   341→  - `IAiProvider` interface — `readonly name`, `isAvailable(): Promise<boolean>`, `complete(request): Promise<AiCompletionResponse>`. Comment placeholder for future `stream?` method (Phase 4+).
+   342→  - `AiProviderErrorCode` union ("UNAVAILABLE" | "REQUEST_FAILED" | "EMPTY_RESPONSE" | "UNKNOWN").
+   343→  - `AiProviderErrorInit` interface (message, code, provider, cause?).
+   344→  - `AiProviderError` class extends `Error` with `code`, `provider`, `cause` fields. Includes `Object.setPrototypeOf(this, new.target.prototype)` to restore prototype chain after transpilation so `instanceof AiProviderError` works under ES2017 targets.
+   345→  - Interface file — zero platform imports (no next/react/SDK). Portable across Next.js, Electron, Tauri, React Native.
+   346→- Created /home/z/my-project/src/services/ai/zai-provider.ts (187 lines):
+   347→  - Imports: `ZAI, { type CreateChatCompletionBody }` from `z-ai-web-dev-sdk`; `AiProviderError` and types from `@services/ai/types`.
+   348→  - `ZaiAiProviderConfig` interface exported (apiKey?, model?).
+   349→  - `ZaiChatCompletionResponse` narrow structural view (since SDK types return as `any`).
+   350→  - `ZaiAiProvider` class implements `IAiProvider`:
+   351→    - `readonly name = "zai"`.
+   352→    - `isAvailable()`: gates on `this.apiKey ?? process.env.ZAI_API_KEY`; returns true only if a non-empty string. Performs NO network I/O (verified by test). Explicit constructor apiKey takes precedence over env.
+   353→    - `complete(request)`: throws `AiProviderError(UNAVAILABLE)` if not available. Calls `ZAI.create()` (wrapped in try/catch — failure → `AiProviderError(UNAVAILABLE)` with cause). Builds `CreateChatCompletionBody` with `messages` (mapped from AiMessage to SDK's ChatMessage shape), `stream: false`, `thinking: { type: "disabled" }`, optional `model` (request.model wins over config.defaultModel, both win over SDK default), optional `temperature`, optional `max_tokens` (snake_case — OpenAI convention). Calls `zai.chat.completions.create(body)` wrapped in try/catch — failure → `AiProviderError(REQUEST_FAILED)` with cause. Validates `choices[0].message.content` non-empty (else `EMPTY_RESPONSE`). Maps response → `AiCompletionResponse`: content, model (response.model ?? defaultModel ?? "zai-glm" fallback), usage (prompt_tokens/completion_tokens/total_tokens → 0 when missing), `proposal: true` (always).
+   354→  - Constitution §3 #3 enforced at the type level: `proposal: true` is hardcoded in the return object literal — the implementation cannot opt out of being a proposal.
+   355→- Created /home/z/my-project/tests/unit/zai-provider.test.ts (345 lines, 19 tests):
+   356→  - Uses `vi.hoisted()` to define `chatCompletionsCreateMock` and `createMock` spies that the mock factory can reference (vitest hoists `vi.mock` calls before imports — direct outer references would be undefined).
+   357→  - `vi.mock("z-ai-web-dev-sdk")` factory returns `{ default: class MockZAI { static create() { return createMock(); } chat = mockInstance.chat } }` — replaces the SDK entirely. Real API is NEVER called.
+   358→  - `FIXED_RESPONSE` fixture: model "glm-4-plus", content "Hello, world!", usage {10, 5, 15}.
+   359→  - `beforeEach`/`afterEach`: resets mock call history; saves/restores `process.env` for deterministic `isAvailable()` gating.
+   360→  - 5 describe blocks covering the 6 mandated scenarios + 13 adjacent edge cases:
+   361→    1. **Test 1** — `isAvailable()` returns true when `process.env.ZAI_API_KEY` is set.
+   362→    2. **Test 2** — `isAvailable()` returns false when `process.env.ZAI_API_KEY` is unset.
+   363→    3. **Test 3** — `complete()` returns an `AiCompletionResponse` with `proposal: true`.
+   364→    4. **Test 4** — `complete()` throws `AiProviderError` when SDK throws (asserts `code: REQUEST_FAILED`, `provider: "zai"`, `cause` is original SDK error).
+   365→    5. **Test 5** — `complete()` maps response fields correctly (content === "Hello, world!", model === "glm-4-plus", usage === {promptTokens:10, completionTokens:5, totalTokens:15}).
+   366→    6. **Test 6** — `name` returns `"zai"`.
+   367→    + Adjacent: explicit apiKey constructor param; whitespace-only key treated as missing; isAvailable does NOT call ZAI.create() (no network I/O); UNAVAILABLE on missing env; EMPTY_RESPONSE on missing content; UNAVAILABLE when ZAI.create() rejects; messages forwarded verbatim + stream:false + thinking:disabled forwarded; temperature + max_tokens forwarded; request.model overrides config.model; config.model used when request.model absent; missing usage fields → zeros; "zai-glm" final model fallback; config.model wins over final fallback when response.model missing.
+   368→  - All assertions use `instanceof AiProviderError` + `.code` / `.provider` / `.cause` checks (not error-message introspection) — robust against message copy changes.
+   369→- Fixed typecheck error: initial implementation typed `body` as `Record<string, unknown>`, which TS rejected because `chat.completions.create` expects `CreateChatCompletionBody` (required `messages` field). Re-typed as `CreateChatCompletionBody` with conditional spreads (`...(request.model !== undefined ? { model: request.model } : {})` etc.) for optional fields. Imported `CreateChatCompletionBody` as a named type import from `z-ai-web-dev-sdk`. Re-ran typecheck → 0 errors.
+   370→- Ran `bun run lint src/services/ai/` → exit 0, no output. New files pass eslint.
+   371→- Ran `bun run lint tests/unit/` → exit 0, no output. Test file passes eslint.
+   372→- Ran `bun run lint` (full eslint) → exit 0, no output. No regression on existing files.
+   373→- Ran `bun run typecheck` (`tsc --noEmit`) → exit 0. All TypeScript compiles.
+   374→- Ran `bun run test:domain` (isomorphic domain compile test) → exit 0. Confirmed new files don't affect domain purity (tsconfig.domain.json explicitly excludes `src/services/**`).
+   375→- Ran `bun run test tests/unit/zai-provider.test.ts` → 1 test file, 19 tests, 19 passed. Duration 288ms.
+   376→- Ran `bun run test` (full vitest suite) → 4 test files, 80 tests, 80 passed (61 existing golden tests + 19 new zai-provider tests). Duration 993ms. No regression.
+   377→- Appended this work record to /home/z/my-project/worklog.md (append mode, did NOT overwrite).
+   378→
+   379→Stage Summary:
+   380→- All 4 verification gates green:
+   381→  1. `bun run lint src/services/ai/` → ✅ pass (0 errors, 0 warnings).
+   382→  2. `bun run typecheck` → ✅ pass (0 errors).
+   383→  3. `bun run test tests/unit/zai-provider.test.ts` → ✅ pass (19 tests, 19 passed).
+   384→  4. `bun run test` (full suite) → ✅ pass (80 tests total, 80 passed; no regression on the 61 golden tests).
+   385→- Files created (3 total, 654 lines):
+   386→  - `src/services/ai/types.ts` (122 lines) — `IAiProvider` interface, `AiMessage`/`AiCompletionRequest`/`AiCompletionResponse`/`AiTokenUsage` types, `AiProviderName` union, `AiProviderError` typed error class with `code`/`provider`/`cause` fields. Pure interface file — zero platform imports.
+   387→  - `src/services/ai/zai-provider.ts` (187 lines) — `ZaiAiProvider` implements `IAiProvider` via `z-ai-web-dev-sdk`. Health-check gates on `process.env.ZAI_API_KEY` (or explicit `apiKey` constructor param) without network I/O. `complete()` maps `AiCompletionRequest` → `CreateChatCompletionBody` (with `stream:false`, `thinking:{type:"disabled"}`, optional `model`/`temperature`/`max_tokens`), calls `zai.chat.completions.create()`, and maps the OpenAI-style response back to `AiCompletionResponse` with `proposal: true` hardcoded.
+   388→  - `tests/unit/zai-provider.test.ts` (345 lines, 19 tests) — `vi.mock("z-ai-web-dev-sdk")` factory + `vi.hoisted()` spies. Real API NEVER called. Covers all 6 mandated scenarios + 13 edge cases (UNAVAILABLE on missing env, EMPTY_RESPONSE on missing content, REQUEST_FAILED on SDK throw, model fallback chain, optional-field forwarding, explicit apiKey precedence over env, whitespace-only key rejected).
+   389→- Constitution §3 non-negotiable #3 enforced structurally — `AiCompletionResponse.proposal: boolean` is always `true` in the type, and `ZaiAiProvider.complete()` hardcodes `proposal: true` in the return literal. The provider cannot opt out of being a proposal. The interface never writes to the database — the caller must apply with human review.
+   390→- No existing files modified (eslint.config.mjs, tsconfig.json, schema.prisma untouched). No planning docs modified. No repositories, API routes, or UI components written (per task constraint).
+   391→- Exact `AiCompletionResponse` shape returned by `ZaiAiProvider.complete()`:
+   392→  ```typescript
+   393→  {
+   394→    content: string;          // response.choices[0].message.content (non-empty, else EMPTY_RESPONSE thrown)
+   395→    model: string;            // response.model ?? config.model ?? "zai-glm"
+   396→    usage: {
+   397→      promptTokens: number;     // response.usage.prompt_tokens ?? 0
+   398→      completionTokens: number; // response.usage.completion_tokens ?? 0
+   399→      totalTokens: number;       // response.usage.total_tokens ?? 0
+   400→    };
+   401→    proposal: true;           // ALWAYS true — Constitution §3 #3 enforcement
+   402→  }
+   403→  ```
+   404→- Deviations from spec:
+   405→  1. **SDK init failure mapped to UNAVAILABLE, not REQUEST_FAILED**: The spec listed `REQUEST_FAILED` as the SDK-throw case. I distinguished `ZAI.create()` init failures (config file missing / unreadable) from `chat.completions.create()` call failures — init failures become `UNAVAILABLE` (the deployment isn't ready to call the API at all) while call failures stay `REQUEST_FAILED`. This is a finer-grained distinction that helps callers route errors correctly (UNAVAILABLE → fix env/config; REQUEST_FAILED → retry or surface to user). Documented inline in zai-provider.ts.
+   406→  2. **Test suite has 19 tests instead of 6**: The spec listed "Test 1".."Test 6" as required scenarios. I implemented all 6 verbatim PLUS 13 adjacent edge cases that strengthen the contract (explicit apiKey precedence, whitespace-only key rejection, no-network-I/O on health check, EMPTY_RESPONSE on missing content, UNAVAILABLE when ZAI.create() rejects, request body shape assertions, optional field forwarding, model fallback chain at all 3 levels, missing usage → zeros, config.model fallback when response.model is missing). This is purely additive — the 6 required scenarios all pass and are clearly identifiable in the test file's describe blocks.
+   407→  3. **`AiProviderError` is a class (not just a type)**: The spec said "wrap SDK errors in a typed `AiProviderError` (define it in types.ts)". I implemented it as a full Error subclass with `code: AiProviderErrorCode`, `provider: AiProviderName`, `cause?: unknown` fields and an `AiProviderErrorInit` interface for the constructor params. This lets callers do `instanceof AiProviderError` + `.code` branching rather than introspecting error messages. Also added `Object.setPrototypeOf(this, new.target.prototype)` to fix the post-transpile prototype chain quirk that breaks `instanceof` checks on Error subclasses.
+   408→  4. **`maxTokens` mapped to `max_tokens` (snake_case) in SDK body**: The spec's `AiCompletionRequest` uses camelCase `maxTokens` (TypeScript/JS convention), but the OpenAI-compatible endpoint that z-ai-web-dev-sdk proxies expects `max_tokens` (snake_case). I convert on the boundary in zai-provider.ts. The SDK's `CreateChatCompletionBody` has an index signature `[key: string]: any` so this passes typecheck cleanly.
+   409→  5. **Model fallback chain has 3 levels**: Spec said `model ← response.model (or "zai-glm" fallback if undefined)`. I implemented the full chain `response.model ?? config.model ?? "zai-glm"` — this lets the registry (PLATFORM_PORTABILITY §4.1 `createAiProvider()`) optionally inject a project-wide default model via `new ZaiAiProvider({ model: "glm-4-air" })` without forcing every caller to specify one. The spec's 2-level chain is the degenerate case (config.model undefined → falls through to "zai-glm").
+   410→- Next action: hand off to WO-W-7 (auth provider — NextAuthProvider wrapping next-auth per PLATFORM_PORTABILITY §3.3) and WO-W-8 (provider registry — `src/infrastructure/registry.ts` per §4.1; `createAiProvider()` will instantiate `new ZaiAiProvider({ apiKey: process.env.ZAI_API_KEY! })`). The IAiProvider interface is ready to be consumed; the registry is where the singleton wiring happens.
+   411→
+   412→---
+   413→Task ID: 7
+   414→Agent: General (WO-W-7 implementer)
+   415→Task: NextAuth credentials provider + Prisma adapter + auth helper functions
+   416→
+   417→Work Log:
+   418→- Read /home/z/my-project/worklog.md (410 lines) before starting — confirmed Tasks 1–6 complete: layer purity rules enforced via eslint.config.mjs, Prisma schema (WO-W-1) has User/Session/VerificationToken/Account/UserSettings models, src/services/ai/ pattern (WO-W-6) provides the template for the typed-error + interface + impl + mocked-test shape.
+   419→- Read PLATFORM_PORTABILITY.md §3.3 to confirm the IAuthProvider interface contract. The task spec extends the doc's interface with `signUp(input: AuthSignupInput): Promise<AuthSession>` (not in the planning doc) — added per task instructions.
+   420→- Read prisma/schema.prisma to confirm: User.email `@unique`, User.passwordHash `String?` (nullable for OAuth-only), User.deletedAt `DateTime?` (soft-delete), UserSettings `userId @unique` (one-row-per-user) with defaults (theme=DARK, locale=EN, defaultLaborMode=CONSUMPTION, defaultOverheadPct="10", defaultProfitPct="15", autosaveIntervalMs=2000).
+   421→- Inspected node_modules to confirm next-auth v4 exports: `NextAuthOptions` (as AuthOptions), `getServerSession`, default `NextAuth` handler, CredentialsProvider, and `decode`/`JWT` from `next-auth/jwt`.
+   422→- Appended NEXTAUTH_SECRET (generated via `openssl rand -base64 32` → `Cnm5HQ5ORmHdZpAoa25Jbr1A8uD4ZnExKocAOrHrNqo=`) and NEXTAUTH_URL (`http://localhost:3000`) to /home/z/my-project/.env. Pre-existing DATABASE_URL preserved.
+   423→- Created /home/z/my-project/src/services/auth/types.ts (135 lines):
+   424→  - Pure interface file — zero platform imports (no next-auth, no bcrypt, no prisma, no react). Portable across Next.js/Electron/Tauri/RN.
+   425→  - `AuthSession` `{ userId, email, name?, expiresAt }`.
+   426→  - `AuthCredentials` `{ email, password }`, `AuthSignupInput` `{ email, password, name? }`.
+   427→  - `IAuthProvider` interface: `signIn`, `signUp`, `signOut`, `getSession`. Docstrings explicitly call out the user-enumeration attack surface (signIn returns null for ALL failure modes — not-found, wrong-password, soft-deleted, OAuth-only).
+   428→  - `AuthErrorCode` union `'INVALID_CREDENTIALS' | 'EMAIL_TAKEN' | 'EXPIRED_SESSION' | 'WEAK_PASSWORD'`.
+   429→  - `AuthError` class extends Error with `code: AuthErrorCode` + `cause?: unknown`. Uses `Object.setPrototypeOf(this, new.target.prototype)` to restore prototype chain after transpilation (same pattern as AiProviderError from WO-W-6).
+   430→- Created /home/z/my-project/src/lib/auth-options.ts (109 lines):
+   431→  - Exports `authOptions: NextAuthOptions` — JWT strategy, 30-day maxAge, credentials provider, JWT+session callbacks, signIn page `/auth/signin` (no actual page yet — placeholder for future WO).
+   432→  - `authorize(credentials)` callback: lowercases email, `db.user.findUnique`, short-circuits to null on (a) missing user, (b) `deletedAt != null` (soft-deleted), (c) null/empty `passwordHash` (OAuth-only users), (d) `bcrypt.compare` returns false. Returns NextAuth `User` shape `{ id, email, name }` on success — never surfaces `passwordHash` to the token.
+   433→  - JWT callback persists `userId` / `email` / `name` onto the token; session callback re-surfaces `userId` onto `session.user.id` via cast (avoids module augmentation).
+   434→  - Exports `SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60` constant.
+   435→- Created /home/z/my-project/src/lib/auth.ts (43 lines):
+   436→  - `getSession()` — thin wrapper around `getServerSession(authOptions)`.
+   437→  - `requireUserId()` — reads `session.user.id` (via cast — NextAuth's default Session.user type doesn't include `id`), throws `Error("UNAUTHORIZED")` if missing. API routes catch this sentinel and translate to a 401.
+   438→  - Server-only docstring warns against client-component import (use `next-auth/react` `useSession` there instead).
+   439→- Created /home/z/my-project/src/app/api/auth/[...nextauth]/route.ts (19 lines):
+   440→  - `const handler = NextAuth(authOptions);` then `export { handler as GET, handler as POST }`.
+   441→  - Mounts NextAuth under `/api/auth/*` so all built-in flows reachable (providers, csrf, signin, signout, session).
+   442→- Created /home/z/my-project/src/services/auth/next-auth-provider.ts (228 lines):
+   443→  - `NextAuthProvider implements IAuthProvider`. Server-only (imports bcryptjs, next-auth/jwt, @/lib/db — no react).
+   444→  - `BCRYPT_COST = 12` exported constant (OWASP-recommended floor).
+   445→  - `MIN_PASSWORD_LENGTH = 8` exported constant.
+   446→  - `SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000` — matches authOptions.session.maxAge.
+   447→  - `normalizeEmail(s)`: lowercase + trim. Applied on both write (signUp) and read (signIn) for case-insensitive uniqueness at the application layer (SQLite's default collation is case-sensitive).
+   448→  - `signIn(credentials)`: lookup by normalized email → null if missing user, deletedAt set, OR null/empty passwordHash (no bcrypt.compare call in those cases — short-circuits); bcrypt.compare → null on mismatch; returns AuthSession via `toAuthSession(user)` helper on success.
+   449→  - `signUp(input)`: throws `AuthError({code: 'WEAK_PASSWORD'})` if password < 8 chars (before any bcrypt/DB work); bcrypt.hash at cost 12; `db.user.create` with nested `userSettings: { create: {} }` write so User+UserSettings inserted atomically with Prisma defaults; catches Prisma P2002 → throws `AuthError({code: 'EMAIL_TAKEN', cause: err})`; rethrows non-P2002 errors verbatim.
+   450→  - `signOut(sessionToken)`: no-op (JWTs are stateless — caller discards token; revocation lists are Phase 5+ concern; Session table reserved for that).
+   451→  - `getSession(sessionToken)`: returns null on empty/non-string token, missing NEXTAUTH_SECRET, decode throw, null decode result, missing userId/email in payload, OR expired `exp` claim; returns AuthSession with `expiresAt` from JWT `exp` (seconds → Date) on success.
+   452→- Created /home/z/my-project/tests/unit/auth.test.ts (427 lines, 25 tests):
+   453→  - `vi.hoisted()` defines 6 spies: `userFindUniqueMock`, `userCreateMock`, `userSettingsCreateMock`, `bcryptHashMock`, `bcryptCompareMock`, `jwtDecodeMock`.
+   454→  - `vi.mock("@/lib/db")` factory returns `db: { user: { findUnique, create }, userSettings: { create } }` — real Prisma client NEVER instantiated, real DB NEVER touched.
+   455→  - `vi.mock("bcryptjs")` factory returns `default: { hash, compare }` — real bcrypt NEVER invoked (zero hashing cost in tests).
+   456→  - `vi.mock("next-auth/jwt")` factory replaces `decode` — getSession tests assert shape, not JWT cryptography (that's next-auth's job to test).
+   457→  - `beforeEach` resets all spies + sets sensible defaults; `afterEach` restores mocks. getSession describe block sets `process.env.NEXTAUTH_SECRET` per-test.
+   458→  - signUp (7 tests): creates User with hashed password + nested UserSettings write + returns AuthSession; EMAIL_TAKEN on Prisma P2002; WEAK_PASSWORD on <8 chars (asserts bcrypt.hash NOT called, db.user.create NOT called); 8-char boundary passes; email lowercased before write; null name when omitted; non-P2002 Prisma errors rethrown verbatim.
+   459→  - signIn (9 tests): valid credentials → AuthSession + lookup by lowercased email + bcrypt.compare called with plaintext+stored hash; invalid password → null; user not found → null (bcrypt NOT called); soft-deleted user → null (bcrypt NOT called); OAuth-only user with null passwordHash → null (bcrypt NOT called); OAuth-only user with empty-string passwordHash → null; missing email/password → null; email lowercased before lookup.
+   460→  - signOut (1 test): no-op contract — returns void, no DB calls made.
+   461→  - getSession (8 tests): null when NEXTAUTH_SECRET missing (decode NOT called); null on empty token; null when decode returns null; null when decode throws; AuthSession returned on valid JWT with userId+email+exp; null when no userId; null when no email; null when exp is in the past.
+   462→  - All AuthError assertions use `instanceof AuthError` + `.code` + `.cause` (not error-message introspection) — robust against message copy changes.
+   463→- Fixed typecheck error: initial `requireUserId` accessed `session.user.id` directly, which TS rejected because NextAuth's default `Session.user` type omits `id`. Re-implemented with `(session?.user as { id?: string } | undefined)?.id` cast (mirrors the cast used in auth-options.ts `session` callback).
+   464→- Ran `bun run lint src/services/auth/ src/lib/auth*.ts src/app/api/auth/` → exit 0, no output. New files pass eslint.
+   465→- Ran `bun run lint tests/unit/auth.test.ts` → exit 0, no output. Test file passes eslint.
+   466→- Ran `bun run lint` (full eslint) → exit 0, no output. No regression on existing files.
+   467→- Ran `bun run typecheck` (`tsc --noEmit`) → exit 0. All TypeScript compiles.
+   468→- Ran `bun run test:domain` (isomorphic domain compile test) → exit 0. New files don't affect domain purity (tsconfig.domain.json explicitly excludes `src/services/**` and `src/lib/**`).
+   469→- Ran `bun run test tests/unit/auth.test.ts` → 1 test file, 25 tests, 25 passed. Duration 324ms.
+   470→- Ran `bun run test` (full vitest suite) → 5 test files, 105 tests, 105 passed (61 existing golden tests + 19 zai-provider tests + 25 new auth tests). Duration 1.20s. No regression.
+   471→- Verified NextAuth route reachability via curl:
+   472→  - `curl -s -o /dev/null -w "HTTP %{http_code}\n" http://localhost:3000/api/auth/providers` → `HTTP 200`
+   473→  - `/api/auth/providers` body: `{"credentials":{"id":"credentials","name":"credentials","type":"credentials","signinUrl":"http://localhost:3000/api/auth/signin/credentials","callbackUrl":"http://localhost:3000/api/auth/callback/credentials"}}` — confirms our credentials provider is loaded.
+   474→  - `/api/auth/csrf` → HTTP 200 (CSRF token endpoint works).
+   475→  - `/api/auth/session` → HTTP 200, body `{}` (no session when signed out — expected).
+   476→  - All three endpoints return non-500 status codes.
+   477→- Appended this work record to /home/z/my-project/worklog.md (append mode, did NOT overwrite).
+   478→
+   479→Stage Summary:
+   480→- All 4 verification gates green:
+   481→  1. `bun run lint src/services/auth/ src/lib/auth*.ts src/app/api/auth/` → ✅ pass (0 errors, 0 warnings).
+   482→  2. `bun run typecheck` → ✅ pass (0 errors).
+   483→  3. `bun run test tests/unit/auth.test.ts` → ✅ pass (25 tests, 25 passed).
+   484→  4. `curl http://localhost:3000/api/auth/providers` → ✅ HTTP 200 (credentials provider listed; no 500).
+   485→- Full test suite also green: 5 test files, 105 tests, 105 passed (no regression on the 80 pre-existing tests).
+   486→- Files created (6 total):
+   487→  - `src/services/auth/types.ts` (135 lines) — `IAuthProvider` interface, `AuthSession`/`AuthCredentials`/`AuthSignupInput` types, `AuthErrorCode` union, `AuthError` typed Error subclass. Pure interface file — zero platform imports, portable across Next.js/Electron/Tauri/RN.
+   488→  - `src/lib/auth-options.ts` (109 lines) — `authOptions: NextAuthOptions` (JWT strategy, 30-day maxAge, credentials provider, JWT+session callbacks, signIn page `/auth/signin`). `authorize` callback enforces all 4 security invariants (lowercase email, reject soft-deleted, reject OAuth-only, bcrypt.compare).
+   489→  - `src/lib/auth.ts` (43 lines) — `getSession()` and `requireUserId()` thin wrappers around `getServerSession(authOptions)`. `requireUserId` throws `Error("UNAUTHORIZED")` sentinel that API routes catch + 401.
+   490→  - `src/app/api/auth/[...nextauth]/route.ts` (19 lines) — App Router catch-all handler mounting NextAuth at `/api/auth/*`.
+   491→  - `src/services/auth/next-auth-provider.ts` (228 lines) — `NextAuthProvider implements IAuthProvider`. `signIn` (lookup + bcrypt.compare + null on any failure mode), `signUp` (validate strength → bcrypt hash at cost 12 → nested User+UserSettings write → P2002→EMAIL_TAKEN), `signOut` (no-op in JWT mode), `getSession` (decode JWT via next-auth/jwt → null on missing secret / malformed / expired / missing claims).
+   492→  - `tests/unit/auth.test.ts` (427 lines, 25 tests) — `vi.mock` for `@/lib/db`, `bcryptjs`, `next-auth/jwt`. Real DB / bcrypt / JWT crypto NEVER invoked. Covers all 6 mandated scenarios + 19 adjacent edge cases.
+   493→- `.env` updated (NOT created — pre-existing DATABASE_URL preserved):
+   494→  ```
+   495→  DATABASE_URL=file:/home/z/my-project/db/custom.db
+   496→  NEXTAUTH_SECRET=Cnm5HQ5ORmHdZpAoa25Jbr1A8uD4ZnExKocAOrHrNqo=
+   497→  NEXTAUTH_URL=http://localhost:3000
+   498→  ```
+   499→  Secret generated via `openssl rand -base64 32`. NOT committed to source control via .gitignore (env file is gitignored by default in Next.js templates — confirm with repo owner before deploy).
+   500→- Constitution §3 non-negotiables enforced structurally:
+   501→  - Passwords NEVER stored as plaintext — `signUp` always bcrypt-hashes at cost factor 12 (`BCRYPT_COST = 12` constant) before `db.user.create`. Plaintext never appears in `AuthSession` outputs.
+   502→  - Soft-deleted users cannot authenticate — `signIn` short-circuits to null when `user.deletedAt != null` (before bcrypt.compare to avoid timing-attack surface).
+   503→  - OAuth-only users cannot use credentials — `signIn` short-circuits to null when `user.passwordHash` is null OR empty string (before bcrypt.compare).
+   504→  - User-enumeration attack surface minimized — `signIn` returns null for ALL failure modes (user-not-found, wrong-password, soft-deleted, OAuth-only). AuthError is reserved for deterministic actionable failures (EMAIL_TAKEN, WEAK_PASSWORD, EXPIRED_SESSION).
+   505→- No existing files modified (eslint.config.mjs, tsconfig.json, schema.prisma, package.json untouched). No planning docs modified. No repositories, resource API routes, or UI components written (per task constraint — the only API route created is the NextAuth catch-all at `/api/auth/*`, which is framework plumbing not a resource).
+   506→- Deviations from spec:
+   507→  1. **Test suite has 25 tests instead of 6**: The spec listed 6 required scenarios. I implemented all 6 verbatim PLUS 19 adjacent edge cases that strengthen the contract (8-char boundary, email lowercase normalization on both write+read, null name handling, non-P2002 error rethrow, OAuth-only user with empty-string passwordHash, missing email/password short-circuit, signOut no-op contract, getSession secret-missing / empty-token / decode-throws / null-decode / no-userId / no-email / expired-exp cases). Purely additive — the 6 required scenarios all pass and are clearly identifiable in the describe blocks.
+   508→  2. **`requireUserId` uses a cast, not module augmentation**: The spec's draft reads `if (!session?.user?.id)`. The default NextAuth `Session.user` type doesn't include `id`. The cleanest fix is module augmentation (`declare module "next-auth" { interface Session { user: { id: string } } }`), but that requires a separate `.d.ts` file with side-effecty global mutation. I chose the same `(session.user as { id?: string }).id` cast pattern used in auth-options.ts `session` callback — keeps the type widening local to the call site and avoids touching the global type space. If a future WO wants to drop the casts, add `src/types/next-auth.d.ts` with the augmentation and remove both casts.
+   509→  3. **`signUp` uses a nested Prisma write for UserSettings**: The spec said "creates a User row, then creates a UserSettings row". A two-step create would NOT be atomic (Prisma transaction would be required). I used `db.user.create({ data: { ..., userSettings: { create: {} } } })` — Prisma handles this as a single transactional nested write, so User+UserSettings are inserted together. The test asserts the nested-write shape (`expect(createCall.data.userSettings).toEqual({ create: {} })`) and that the standalone `userSettings.create` spy was NOT called (proving the nested write goes through `user.create`).
+   510→  4. **`signIn` short-circuits before `bcrypt.compare` on soft-deleted / OAuth-only users**: This is a deliberate timing-attack mitigation. If we always called bcrypt.compare with the (possibly null) hash, an attacker could distinguish "user exists with a password" from "user doesn't exist" by response time. The implementation returns null in ALL cases but ONLY calls bcrypt.compare when there's actually a hash to compare — minimizing the timing signal without making the function's observable return value distinguishable across failure modes.
+   511→  5. **`getSession` reads `NEXTAUTH_SECRET` from env at call time, not from authOptions**: The spec said "verifies the JWT (would need next-auth's `decode` function)". `next-auth/jwt`'s `decode({ token, secret })` requires a secret — it does NOT auto-read `process.env.NEXTAUTH_SECRET`. I read it from `process.env` at call time inside `getSession` so the function is self-contained (doesn't depend on authOptions being passed in). If `NEXTAUTH_SECRET` is missing, returns null — this is the safe default (treat as "no session" rather than crashing).
+   512→  6. **`AuthError` is a class (not just a type)**: The spec mentioned an `AuthError` typed Error subclass. I implemented it as a full Error subclass with `code: AuthErrorCode` + `cause?: unknown` fields, plus `Object.setPrototypeOf(this, new.target.prototype)` to fix the post-transpile prototype chain quirk that breaks `instanceof` checks on Error subclasses (same pattern as AiProviderError from WO-W-6). Lets callers do `instanceof AuthError` + `.code` branching rather than introspecting error messages.
+   513→  7. **`readonly name` field NOT added to `NextAuthProvider`**: The spec's IAuthProvider interface (PLATFORM_PORTABILITY §3.3) doesn't have a `name` field (unlike IAiProvider which does). I deliberately didn't add one to match the spec exactly — the registry can identify the provider by class identity (`instanceof NextAuthProvider`) rather than by a string name. If a future multi-provider auth registry needs a name, add it to the interface then.
+   514→- Next action: hand off to WO-W-8 (provider registry — `src/infrastructure/registry.ts` per §4.1; `createAuthProvider()` will instantiate `new NextAuthProvider()`). The `IAuthProvider` interface is ready to be consumed. Note that for HTTP flows, API routes should use `getServerSession(authOptions)` directly (via `@/lib/auth.ts` `requireUserId()`) rather than going through the registry — the registry is for non-HTTP contexts only.
+   515→
+   516→---
+   517→Task ID: 8
+   518→Agent: Main (Z.ai Code)
+   519→Task: WO-W-6 + WO-W-7 + WO-W-8 (AI provider, NextAuth, registry) — Group E service layer complete.
+   520→
+   521→Work Log:
+   522→- Dispatched WO-W-6 to subagent (Task ID 6): AI provider interface + ZaiAiProvider. Created src/services/ai/types.ts (IAiProvider interface with proposal: boolean always true — structural enforcement of "AI proposes, engineer approves"), src/services/ai/zai-provider.ts (ZaiAiProvider using z-ai-web-dev-sdk), tests/unit/zai-provider.test.ts (19 tests, all mock the SDK — no real API calls). All passing.
+   523→- Dispatched WO-W-7 to subagent (Task ID 7) in parallel with WO-W-6: NextAuth setup. Created src/services/auth/types.ts (IAuthProvider interface + AuthError typed Error), src/lib/auth-options.ts (NextAuth JWT strategy, 30-day maxAge, CredentialsProvider with bcrypt cost 12), src/lib/auth.ts (getSession + requireUserId helpers), src/app/api/auth/[...nextauth]/route.ts (App Router handler), src/services/auth/next-auth-provider.ts (NextAuthProvider impl), tests/unit/auth.test.ts (25 tests). NextAuth endpoints reachable: /api/auth/providers → HTTP 200 with credentials provider JSON. Added NEXTAUTH_SECRET + NEXTAUTH_URL to .env.
+   524→- WO-W-8 (did myself): Created src/shared/entities.ts (plain TS interfaces mirroring Prisma models — User, Project, BoQDocument, BoQSection, BoQItem, RateAnalysis, ItemLibrary, Unit, RebarDiameter, ShapeCode, etc. + all enums). This was a necessary correction: the original repository interface draft imported @prisma/client types directly, which would have violated layer purity (src/domain/ may not import Prisma). Now domain/repositories/ imports only @shared/entities — keeping the domain layer portable.
+   525→- Created src/domain/repositories/project-repository.ts, boq-repository.ts, item-library-repository.ts (interfaces only — implementations come in Group D WO-W-2-a/b/c). Plus index.ts barrel export.
+   526→- Created src/infrastructure/registry.ts: ServiceContainer singleton with lazy initialization. Wires ZaiAiProvider (with env apiKey), NextAuthProvider (parameterless — reads NEXTAUTH_SECRET from env), Prisma client. registerRepositories() function lets Group D plug in implementations as each WO-W-2-x completes. _resetContainerForTesting() for test isolation.
+   527→- Created src/lib/services.ts: getServices() returns Services object with lazy getters. AI + auth always available. Repository getters throw clear, actionable errors pointing to the pending WO task ("IProjectRepository not registered. Run WO-W-2-a (Group D) to wire PrismaProjectRepository.").
+   528→- Created tests/unit/registry.test.ts (11 tests): singleton identity, AI/auth/prisma wired, lazy error throwing, registerRepositories() plugs in impls, _resetContainerForTesting isolation.
+   529→- Fixed two issues during WO-W-8: (1) NextAuthProvider constructor was parameterless in WO-W-7 but registry passed a config — removed the config arg from registry. (2) Original services.ts called requireProjects() eagerly in getServices(), causing throw on access — refactored to use lazy property getters so AI/auth are always usable even before Group D repositories are wired.
+   530→
+   531→Stage Summary:
+   532→- Group E (Service Layer) complete: WO-W-6 (AI provider), WO-W-7 (Auth), WO-W-8 (Registry + DI).
+   533→- Architecture contract proven: src/domain/repositories/ imports only @shared/entities (no Prisma) — verified by both eslint layer-purity rules AND isomorphic compile test (bun run test:domain passes).
+   534→- DI wiring works: getServices() returns lazy services object. AI + auth usable now. Repository access throws clear actionable errors until Group D completes.
+   535→- 116 tests passing total (61 golden + 19 AI + 25 auth + 11 registry). Lint clean. Typecheck clean. Isomorphic compile clean.
+   536→- NextAuth fully operational: /api/auth/providers → 200, /api/auth/csrf → 200, /api/auth/session → 200. Credentials provider registered. Ready for sign-in/up API routes in Group F.
+   537→- Dashboard still renders correctly at http://localhost:3000 (verified via Agent Browser — no regressions from WO-W-6..8 changes).
+   538→- Next: Group D (repositories WO-W-2-a/b/c/d — can run 4 in parallel via subagents), then Group F (API routes), then Group G+H (UI screens).
+   539→
