@@ -87,8 +87,13 @@ export const PATCH = withErrorHandler(
     // check-and-set in a single SQL statement. count===0 means either the
     // row was concurrently modified (conflict) or concurrently deleted (404);
     // we re-read to disambiguate.
+    const where: Record<string, unknown> = { id, deletedAt: null };
+    if (input.expectedVersion !== undefined) {
+      where.version = input.expectedVersion;
+    }
+
     const result = await db.boQDocument.updateMany({
-      where: { id, version: input.expectedVersion, deletedAt: null },
+      where,
       data: {
         ...(input.nameEn !== undefined && { nameEn: input.nameEn }),
         ...(input.nameAr !== undefined && { nameAr: input.nameAr }),

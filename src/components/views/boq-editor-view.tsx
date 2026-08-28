@@ -432,6 +432,157 @@ function DocumentEditor({ documentId }: { documentId: string }) {
   );
 }
 
+// ─── Section Header with Inline Edit ───────────────────────────────────────
+
+function SectionHeader({
+  section,
+  expanded,
+  onToggle,
+  itemsCount,
+  subtotal,
+}: {
+  section: BoQSection;
+  expanded: boolean;
+  onToggle: () => void;
+  itemsCount: number;
+  subtotal: string;
+}) {
+  const t = useTranslations("boq");
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(section.titleEn);
+  const [codeDraft, setCodeDraft] = useState(section.code);
+
+  const mutation = useMutation({
+    mutationFn: async (vars: { titleEn: string; code: string }) => {
+      return apiPatch<BoQSection>(`/api/sections/${section.id}`, {
+        titleEn: vars.titleEn,
+        code: vars.code,
+        expectedVersion: section.version,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.documents.detail(section.documentId),
+      });
+      setEditing(false);
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to update section: ${err.message}`);
+    },
+  });
+
+  const handleSave = (e: React.MouseEvent | React.FormEvent) => {
+    e.stopPropagation();
+    if (titleDraft.trim() === "") {
+      toast.error("Section title cannot be empty");
+      return;
+    }
+    mutation.mutate({ titleEn: titleDraft, code: codeDraft });
+  };
+
+  return (
+    <div className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/40 transition-colors text-left border-b border-border/50">
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="p-1 hover:bg-muted rounded text-muted-foreground transition-colors shrink-0"
+          title={expanded ? "Collapse section" : "Expand section"}
+        >
+          {expanded ? (
+            <ChevronDown className="w-4 h-4" />
+          ) : (
+            <ChevronRight className="w-4 h-4" />
+          )}
+        </button>
+
+        {editing ? (
+          <div
+            className="flex items-center gap-2 flex-1 max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Input
+              type="text"
+              value={codeDraft}
+              onChange={(e) => setCodeDraft(e.target.value)}
+              className="h-7 w-16 font-mono text-xs"
+              placeholder="Code"
+              disabled={mutation.isPending}
+            />
+            <Input
+              type="text"
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              className="h-7 flex-1 text-xs"
+              placeholder="Section title"
+              disabled={mutation.isPending}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSave(e);
+                if (e.key === "Escape") setEditing(false);
+              }}
+              autoFocus
+            />
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={handleSave}
+              disabled={mutation.isPending}
+            >
+              {mutation.isPending ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                "Save"
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setEditing(false)}
+              disabled={mutation.isPending}
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <div
+            className="flex items-center gap-2 min-w-0 flex-1 group/sec cursor-pointer"
+            onClick={() => {
+              setTitleDraft(section.titleEn);
+              setCodeDraft(section.code);
+              setEditing(true);
+            }}
+            title="Click to edit section title"
+          >
+            <span className="font-mono text-xs text-muted-foreground shrink-0 bg-muted/60 px-1.5 py-0.5 rounded">
+              {section.code}
+            </span>
+            <span className="font-medium truncate text-foreground group-hover/sec:underline">
+              {section.titleEn || "(untitled)"}
+            </span>
+            <span className="text-[10px] text-muted-foreground/60 opacity-0 group-hover/sec:opacity-100 transition-opacity">
+              ✎
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+        <span>
+          {itemsCount} {t("item").toLowerCase()}
+          {itemsCount === 1 ? "" : "s"}
+        </span>
+        <span className="font-mono font-medium text-foreground">
+          {formatNumber(subtotal)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Section block ─────────────────────────────────────────────────────────
 
 function SectionBlock({
@@ -444,9 +595,7 @@ function SectionBlock({
   const t = useTranslations("boq");
   const [expanded, setExpanded] = useState(true);
 
-  // Section subtotal = Σ of rounded item amounts (per BR-3). We sum the
-  // server-computed `amount` strings — the BoQItem entity exposes this field
-  // pre-computed by the repository on read.
+  // Section subtotal = Σ of rounded item amounts (per BR-3).
   const sectionSubtotal = useMemo(() => {
     return items
       .reduce((sum, i) => sum + Number(i.amount || "0"), 0)
@@ -454,34 +603,14 @@ function SectionBlock({
   }, [items]);
 
   return (
-    <div className="rounded-lg border border-border overflow-hidden">
-      {/* Section header (click to expand/collapse) */}
-      <button
-        type="button"
-        onClick={() => setExpanded((e) => !e)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          {expanded ? (
-            <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
-          ) : (
-            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-          )}
-          <span className="font-mono text-xs text-muted-foreground shrink-0">
-            {section.code}
-          </span>
-          <span className="font-medium truncate">
-            {section.titleEn || "(untitled)"}
-          </span>
-        </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
-          <span>
-            {items.length} {t("item").toLowerCase()}
-            {items.length === 1 ? "" : "s"}
-          </span>
-          <span className="font-mono">{formatNumber(sectionSubtotal)}</span>
-        </div>
-      </button>
+    <div className="rounded-lg border border-border overflow-hidden bg-card">
+      <SectionHeader
+        section={section}
+        expanded={expanded}
+        onToggle={() => setExpanded((e) => !e)}
+        itemsCount={items.length}
+        subtotal={sectionSubtotal}
+      />
 
       {/* Items table */}
       {expanded && (
@@ -547,75 +676,96 @@ function SectionBlock({
 function ItemRow({ item }: { item: BoQItem }) {
   return (
     <tr className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors group">
-      <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
-        {item.code ?? "—"}
+      <td className="px-4 py-2 font-mono text-xs text-muted-foreground w-24">
+        <InlineEdit
+          itemId={item.id}
+          field="code"
+          value={item.code ?? ""}
+          placeholder="Code"
+          version={item.version}
+          className="w-20 font-mono text-xs"
+        />
       </td>
-      <td className="px-4 py-2">{item.descriptionEn}</td>
-      <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
-        {item.unitId ?? "—"}
+      <td className="px-4 py-2">
+        <InlineEdit
+          itemId={item.id}
+          field="descriptionEn"
+          value={item.descriptionEn}
+          placeholder="Item description"
+          version={item.version}
+          className="w-full text-left"
+        />
       </td>
-      <td className="px-4 py-2 text-right">
+      <td className="px-4 py-2 font-mono text-xs text-muted-foreground w-20">
+        <InlineEdit
+          itemId={item.id}
+          field="unitId"
+          value={item.unitId ?? ""}
+          placeholder="Unit"
+          version={item.version}
+          className="w-16 font-mono text-xs"
+        />
+      </td>
+      <td className="px-4 py-2 text-right w-24">
         <InlineEdit
           itemId={item.id}
           field="quantity"
           value={item.quantity}
           version={item.version}
+          className="w-20 text-right font-mono text-xs"
         />
       </td>
-      <td className="px-4 py-2 text-right">
+      <td className="px-4 py-2 text-right w-28">
         <InlineEdit
           itemId={item.id}
           field="rate"
           value={item.rate}
           version={item.version}
+          className="w-24 text-right font-mono text-xs"
         />
       </td>
-      <td className="px-4 py-2 text-right font-mono">
+      <td className="px-4 py-2 text-right font-mono w-32">
         {formatNumber(item.amount)}
       </td>
-      <td className="px-4 py-2 text-right">
+      <td className="px-4 py-2 text-right w-12">
         <DeleteItemButton itemId={item.id} version={item.version} />
       </td>
     </tr>
   );
 }
 
-// ─── Inline edit (Qty / Rate) ──────────────────────────────────────────────
+// ─── Inline edit (Code / Description / Unit / Qty / Rate) ──────────────────
+
+type InlineField = "code" | "descriptionEn" | "unitId" | "quantity" | "rate";
 
 /**
  * Click-to-edit cell. On commit (blur or Enter), PATCHes `/api/items/[id]`
  * with `{ [field]: value, expectedVersion }`. On success, splices the
  * returned `{ item, totals }` into the document detail cache so the totals
  * bar updates without a refetch (live totals — F3 requirement).
- *
- * Optimistic concurrency: `expectedVersion` is the item's current `version`
- * field. If the server returns 409 Conflict (concurrent edit), the mutation
- * errors out, we revert the draft to the cached server value, and surface a
- * toast.
  */
 function InlineEdit({
   itemId,
   field,
   value,
+  placeholder,
   version,
+  className,
 }: {
   itemId: string;
-  field: "quantity" | "rate";
+  field: InlineField;
   value: string;
+  placeholder?: string;
   version: number;
+  className?: string;
 }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
-  // The draft is initialized from the server value at the moment the user
-  // enters edit mode (in `startEditing`, an event handler — not in an
-  // effect). This avoids the set-state-in-effect anti-pattern: the displayed
-  // value when *not* editing is just `value` (read directly from props).
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus + select-all on entering edit mode for fast overwrite. This effect
-  // touches the DOM (input.focus), not React state — allowed.
+  // Focus + select-all on entering edit mode for fast overwrite.
   useEffect(() => {
     if (editing && inputRef.current) {
       inputRef.current.focus();
@@ -624,8 +774,6 @@ function InlineEdit({
   }, [editing]);
 
   const startEditing = () => {
-    // Sync the draft to the freshest server value at click-time so any
-    // updates that arrived since the last render are reflected.
     setDraft(value);
     setEditing(true);
   };
@@ -635,7 +783,10 @@ function InlineEdit({
       const body: Record<string, unknown> = {
         expectedVersion: vars.expectedVersion,
       };
-      body[field] = vars.value;
+      body[field] =
+        vars.value === "" && (field === "code" || field === "unitId")
+          ? null
+          : vars.value;
       return apiPatch<PatchItemResponse>(`/api/items/${itemId}`, body);
     },
     onMutate: () => setSaving(true),
@@ -674,25 +825,39 @@ function InlineEdit({
       setEditing(false);
       return;
     }
-    // Basic numeric validation. The server-side zod schema accepts decimal
-    // strings; we reject empty / non-numeric input before the round-trip.
-    if (draft.trim() === "" || Number.isNaN(Number(draft))) {
-      toast.error("Please enter a valid number");
-      setDraft(value);
-      setEditing(false);
-      return;
+    if (field === "quantity" || field === "rate") {
+      if (draft.trim() === "" || Number.isNaN(Number(draft))) {
+        toast.error("Please enter a valid number");
+        setDraft(value);
+        setEditing(false);
+        return;
+      }
+    } else if (field === "descriptionEn") {
+      if (draft.trim() === "") {
+        toast.error("Description cannot be empty");
+        setDraft(value);
+        setEditing(false);
+        return;
+      }
     }
     mutation.mutate({ value: draft, expectedVersion: version });
   };
 
+  const isNumeric = field === "quantity" || field === "rate";
+
   if (editing) {
     return (
-      <div className="flex items-center justify-end gap-1">
+      <div
+        className={`flex items-center gap-1 ${
+          isNumeric ? "justify-end" : "justify-start"
+        }`}
+      >
         <Input
           ref={inputRef}
           type="text"
-          inputMode="decimal"
+          inputMode={isNumeric ? "decimal" : "text"}
           value={draft}
+          placeholder={placeholder}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => {
@@ -705,26 +870,40 @@ function InlineEdit({
               setEditing(false);
             }
           }}
-          className="h-7 w-24 text-right font-mono text-xs"
+          className={`h-7 text-xs ${
+            className ??
+            (isNumeric ? "w-24 text-right font-mono" : "w-full text-left")
+          }`}
           disabled={saving}
         />
         {saving && (
-          <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+          <Loader2 className="w-3 h-3 animate-spin text-muted-foreground shrink-0" />
         )}
       </div>
     );
   }
 
+  const displayText = isNumeric
+    ? formatNumber(value)
+    : value || placeholder || "—";
+  const isPlaceholder = !value && !isNumeric;
+
   return (
     <button
       type="button"
       onClick={startEditing}
-      className="font-mono text-xs hover:bg-accent hover:text-accent-foreground rounded px-2 py-1 -my-1 transition-colors w-full text-right inline-flex items-center justify-end gap-1"
+      className={`text-xs hover:bg-accent hover:text-accent-foreground rounded px-1.5 py-1 -my-1 transition-colors inline-flex items-center gap-1 group/edit cursor-pointer ${
+        isNumeric
+          ? "font-mono w-full justify-end text-right"
+          : isPlaceholder
+          ? "text-muted-foreground/60 italic w-full text-left"
+          : "w-full text-left font-normal"
+      }`}
       title="Click to edit"
     >
-      <span>{formatNumber(value)}</span>
+      <span className="truncate">{displayText}</span>
       {saving && (
-        <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+        <Loader2 className="w-3 h-3 animate-spin text-muted-foreground shrink-0" />
       )}
     </button>
   );

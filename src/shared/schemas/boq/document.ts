@@ -37,7 +37,7 @@ export const BoQDocumentUpdateSchema = z.object({
   nameEn: z.string().min(1).max(200).optional(),
   nameAr: z.string().max(200).nullable().optional(),
   status: z.enum(["DRAFT", "FINALIZED", "ARCHIVED"]).optional(),
-  expectedVersion: z.number().int().nonnegative(),
+  expectedVersion: z.number().int().nonnegative().optional(),
 });
 
 // ─── Section ───────────────────────────────────────────────────────────────
@@ -58,14 +58,14 @@ export const BoQSectionCreateSchema = z.object({
 
 /**
  * PATCH /api/sections/[id] body — all fields optional; `expectedVersion`
- * required for optimistic concurrency.
+ * optional for optimistic concurrency.
  */
 export const BoQSectionUpdateSchema = z.object({
   code: z.string().min(1).max(50).optional(),
   titleEn: z.string().max(200).optional(),
   titleAr: z.string().max(200).nullable().optional(),
   sortOrder: z.number().int().optional(),
-  expectedVersion: z.number().int().nonnegative(),
+  expectedVersion: z.number().int().nonnegative().optional(),
 });
 
 // ─── Item ──────────────────────────────────────────────────────────────────

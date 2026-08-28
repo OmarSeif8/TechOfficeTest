@@ -78,8 +78,13 @@ export const PATCH = withErrorHandler(
     const body = await req.json();
     const input = BoQSectionUpdateSchema.parse(body);
 
+    const where: Record<string, unknown> = { id, deletedAt: null };
+    if (input.expectedVersion !== undefined) {
+      where.version = input.expectedVersion;
+    }
+
     const result = await db.boQSection.updateMany({
-      where: { id, version: input.expectedVersion, deletedAt: null },
+      where,
       data: {
         ...(input.code !== undefined && { code: input.code }),
         ...(input.titleEn !== undefined && { titleEn: input.titleEn }),
