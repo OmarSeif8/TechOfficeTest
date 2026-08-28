@@ -42,6 +42,10 @@ import { db } from "@/lib/db";
 export const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
 export const authOptions: NextAuthOptions = {
+  secret:
+    process.env.NEXTAUTH_SECRET ||
+    process.env.AUTH_SECRET ||
+    "techoffice-auth-secret-key-32-chars-minimum-prod",
   session: {
     strategy: "jwt",
     maxAge: SESSION_MAX_AGE_SECONDS,

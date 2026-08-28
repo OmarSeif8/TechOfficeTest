@@ -33,7 +33,12 @@ const DEMO_USER_EMAIL = "demo@techoffice.app";
 const DEMO_MODE = process.env.DEMO_MODE !== "false"; // enabled by default
 
 export async function getSession() {
-  return getServerSession(authOptions);
+  try {
+    return await getServerSession(authOptions);
+  } catch (err) {
+    console.error("[Auth] getServerSession error:", err);
+    return null;
+  }
 }
 
 /**
