@@ -3,6 +3,8 @@ import { AppShell } from "@/components/app-shell";
 import { ClientViewRouter } from "@/components/view-router";
 import { AuthGate } from "@/components/auth-gate";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Home page — the single / route for TechOffice.
  *
@@ -39,11 +41,18 @@ export default async function Home() {
   }
 
   // Fetch sidebar stats server-side (cheap counts, rarely change)
-  const libraryItemCount = await db.itemLibrary.count({
-    where: { scope: "APP_GLOBAL" },
-  });
-  const unitCount = await db.unit.count();
-  const rebarCount = await db.rebarDiameter.count();
+  let libraryItemCount = 0;
+  let unitCount = 0;
+  let rebarCount = 0;
+  try {
+    [libraryItemCount, unitCount, rebarCount] = await Promise.all([
+      db.itemLibrary.count({ where: { scope: "APP_GLOBAL" } }).catch(() => 0),
+      db.unit.count().catch(() => 0),
+      db.rebarDiameter.count().catch(() => 0),
+    ]);
+  } catch {
+    // Graceful fallback if database connection is cold during initial render
+  }
 
   return (
     <>

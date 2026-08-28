@@ -144,7 +144,7 @@ export const GET = withErrorHandler(async (_req: Request, ctx: RouteContext) => 
         const fu = revision.fileUpload;
         if (looksLikeDxfFile(fu.originalName, fu.mimeType)) {
           // 3. Read the blob from disk and parse it.
-          const diskPath = path.resolve(process.cwd(), fu.storagePath);
+          const diskPath = path.resolve(/*turbopackIgnore: true*/ process.cwd(), fu.storagePath);
           try {
             const buf = await fs.readFile(diskPath);
             dxfText = buf.toString("utf8");
