@@ -64,7 +64,6 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.4.0",
     "decimal.js": "^10.6.0",
-    "dnd-kit": "^0.0.2",
     "dxf": "^5.3.1",
     "embla-carousel-react": "^8.6.0",
     "exceljs": "^4.4.0",
@@ -96,7 +95,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/bcryptjs": "^3.0.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^4.1.11",
