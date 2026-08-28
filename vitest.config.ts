@@ -27,5 +27,6 @@ export default defineConfig({
     ],
     exclude: ["node_modules/**", ".next/**", "examples/**", "skills/**"],
     globals: true,
+    fileParallelism: false,
   },
 });
