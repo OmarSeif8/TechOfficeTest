@@ -107,7 +107,7 @@ export const BoQItemUpdateSchema = z.object({
   rate: z.string().min(1).optional(),
   itemType: ItemTypeSchema.optional(),
   sortOrder: z.number().int().optional(),
-  expectedVersion: z.number().int().nonnegative(),
+  expectedVersion: z.number().int().nonnegative().optional(),
 });
 
 // ─── Item reorder & move ───────────────────────────────────────────────────

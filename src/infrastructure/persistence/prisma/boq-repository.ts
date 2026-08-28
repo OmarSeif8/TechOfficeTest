@@ -493,8 +493,13 @@ export class PrismaBoQRepository implements IBoQRepository {
       data.amount = computeDenormalisedAmount(newType, newQty, newRate);
     }
 
+    const where: Record<string, unknown> = { id, deletedAt: null };
+    if (expectedVersion !== undefined) {
+      where.version = expectedVersion;
+    }
+
     const result = await db.boQItem.updateMany({
-      where: { id, version: expectedVersion, deletedAt: null },
+      where,
       data: { ...data, version: { increment: 1 } },
     });
 

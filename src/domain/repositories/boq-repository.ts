@@ -57,7 +57,7 @@ export interface BoQItemUpdateInput {
   rate?: string;
   itemType?: BoQItemType;
   sortOrder?: number;
-  expectedVersion: number;
+  expectedVersion?: number;
 }
 
 export type BoQItemUpdateResult =

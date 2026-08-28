@@ -641,8 +641,6 @@ function InlineEdit({
     onMutate: () => setSaving(true),
     onSuccess: (data) => {
       // Splice the updated item + new totals into the document detail cache.
-      // This avoids a refetch — the totals bar updates instantly (F3 live
-      // totals requirement).
       queryClient.setQueryData<DocumentDetailResponse>(
         queryKeys.documents.detail(data.item.documentId),
         (old) => {
@@ -656,6 +654,9 @@ function InlineEdit({
           };
         },
       );
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.documents.detail(data.item.documentId),
+      });
       setSaving(false);
       setEditing(false);
     },

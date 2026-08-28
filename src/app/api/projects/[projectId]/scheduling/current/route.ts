@@ -139,7 +139,9 @@ export const GET = withErrorHandler(async (_req: Request, ctx: RouteContext) => 
   if (!project) return notFound("Project not found");
 
   const latestRun = await services.schedules.getLatestRun(projectId);
-  if (!latestRun) return notFound("No schedule runs exist for this project");
+  if (!latestRun) {
+    return json({ run: null, activities: [], result: null });
+  }
 
   // Fetch the ScheduleActivity rows for this run (empty if status != SUCCESS).
   const runWithActivities = await services.schedules.getRunById(latestRun.id);
