@@ -95,11 +95,11 @@ function buildWhereClause(options: ProjectListOptions): Record<string, unknown> 
   if (options.search !== undefined && options.search.trim() !== "") {
     const term = options.search.trim();
     where.OR = [
-      { nameEn: { contains: term } },
-      { nameAr: { contains: term } },
-      { clientEn: { contains: term } },
-      { clientAr: { contains: term } },
-      { contractNo: { contains: term } },
+      { nameEn: { contains: term, mode: "insensitive" } },
+      { nameAr: { contains: term, mode: "insensitive" } },
+      { clientEn: { contains: term, mode: "insensitive" } },
+      { clientAr: { contains: term, mode: "insensitive" } },
+      { contractNo: { contains: term, mode: "insensitive" } },
     ];
   }
 
