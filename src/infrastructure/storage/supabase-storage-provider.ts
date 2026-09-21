@@ -4,14 +4,14 @@ import {
   StorageUploadOptions,
   StorageUploadResult,
 } from "@/services/storage/types";
-import { LocalStorageProvider } from "./local-storage-provider";
+import { DiskStorageProvider } from "./disk-storage-provider";
 
 export class SupabaseStorageProvider implements IStorageProvider {
   private client: SupabaseClient | null = null;
-  private fallback: LocalStorageProvider;
+  private fallback: DiskStorageProvider;
 
   constructor() {
-    this.fallback = new LocalStorageProvider();
+    this.fallback = new DiskStorageProvider();
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key =
       process.env.SUPABASE_SERVICE_ROLE_KEY ||
