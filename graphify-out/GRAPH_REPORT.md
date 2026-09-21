@@ -1,23 +1,23 @@
 # Graph Report - techoffice-main  (2026-09-22)
 
 ## Corpus Check
-- 538 files · ~1,878,863 words
+- 542 files · ~1,880,736 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 17 file(s) not represented in the graph (top: (none) 11, .example 1, .pid 1)
 
 ## Summary
-- 6247 nodes · 10951 edges · 326 communities (186 shown, 140 thin omitted)
-- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 318 edges (avg confidence: 0.94)
+- 6286 nodes · 10992 edges · 343 communities (203 shown, 140 thin omitted)
+- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 324 edges (avg confidence: 0.94)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e52bc9fe`
+- Built from commit: `c58a6855`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - cn
-- dxf-viewer-view.tsx
+- react
 - fetchJson
 - requireUserId
 - doccontrol/entities.ts
@@ -25,12 +25,12 @@
 - dependencies
 - shared/entities.ts
 - use-toast.ts
-- json
+- license/route.ts
 - scheduling-repositories.ts
 - cpm.ts
 - services.ts
 - 4. Component Stylings
-- react
+- button.tsx
 - commit/route.ts
 - Components
 - Design System Inspired by Mastercard
@@ -38,7 +38,7 @@
 - mongodb/DESIGN.md
 - nvidia/DESIGN.md
 - drawing-repository.ts
-- badRequest
+- payments/[id]/route.ts
 - bmw/DESIGN.md
 - cursor/DESIGN.md
 - expo/DESIGN.md
@@ -81,7 +81,7 @@
 - ibm/DESIGN.md
 - nike/DESIGN.md
 - renault/DESIGN.md
-- submittal-repository.ts
+- doccontrol-repositories.ts
 - meta/DESIGN.md
 - nintendo-2001/DESIGN.md
 - replicate/DESIGN.md
@@ -109,35 +109,35 @@
 - warp/DESIGN.md
 - webflow/DESIGN.md
 - wired/DESIGN.md
-- doccontrol-repositories.ts
+- correspondence-repository.ts
 - wise/DESIGN.md
 - prisma/rate-analysis-repository.ts
 - Components
 - x.ai/DESIGN.md
 - zapier/DESIGN.md
 - Full Conversation — TechOffice Project Planning Chat
-- IAiProvider
+- TechOffice — Platform Portability Guide
 - ENTITY-RELATIONSHIP DESIGN — v1.1 (Web Adaptation)
-- dxf-parser.ts
-- export-view.tsx
-- answer/route.ts
-- scheduling/entities.ts
-- PrismaProjectRepository
-- registry.ts
 - worklog.md
+- dxf-viewer-view.tsx
+- utils.ts
+- scheduling/entities.ts
+- Project
+- Services
+- IAiProvider
 - calculators-view.tsx
 - IItemLibraryRepository
 - 4. Smoke test on ANY folder that contains code:
-- planned-value.ts
+- project-dashboard/route.ts
 - import-view.tsx
 - next-auth-provider.ts
 - wbs-repository.ts
-- 2. Core API Endpoints
+- POST
 - variation-repository.ts
 - Design System Inspired by Kraken
 - compilerOptions
 - Part 3A — Document Control Logs
-- zod
+- domain/payments/cost-loading.ts
 - estimating/rate-analysis.ts
 - Extracted Conversation Turns from Shared GLM Chat
 - PROJECT CONTEXT DOCUMENT — v1.1 (Web Adaptation)
@@ -146,16 +146,16 @@
 - decimal.js
 - CalculationRecord
 - Collection
-- Project
+- IRateAnalysisRepository
 - compilerOptions
-- ServiceContainer
+- correspondence-view.tsx
 - Part 4B — Cost-Schedule Integration, Progress, Reports & AI
 - Supabase
 - components.json
 - Validation Results
 - 1. Work-Order Sequence
 - form.tsx
-- progress-repository.ts
+- registry.ts
 - Changelog
 - PHASE 2 SPEC — Scheduling Domain (CPM Engine) — Web Adaptation
 - domain/scheduling/calendar.ts
@@ -165,28 +165,28 @@
 - PRE-LAUNCH AUDIT — TechOffice v1.0
 - TechOffice — Electron → Next.js 16 Adaptation Guide
 - carousel.tsx
-- IBoQRepository
+- repositories/index.ts
 - WHAT TO DO: Step-by-Step
 - calculations/route.ts
 - devDependencies
 - 3. Domain Modules
 - Critical Artifacts Found (in order of importance for Phase 1)
 - TechOffice Database & Persistence Guide
-- project-dashboard-view.tsx
+- chart.tsx
 - library/route.ts
 - projects/route.ts
 - markup-overlay.tsx
 - rebar.ts
-- 4. Screen Specifications
+- zod
 - websocket/server.ts
 - seed.ts
 - Section Definitions
 - pdf/route.ts
-- addDays
-- gt-dxf-2-measurements.test.ts
+- submittals-view.tsx
+- alert-dialog.tsx
 - supabase/server.ts
 - full-conversation.md
-- IProjectRepository
+- 2. Repository Interface Definitions
 - copy-assets.js
 - concrete.ts
 - gt3-gt8-calculators.test.ts
@@ -196,14 +196,15 @@
 - dev.sh
 - mini-services-start.sh
 - Supabase Postgres Best Practices
+- menubar.tsx
 - paint.ts
 - plaster.ts
 - Document Inventory — Verification Report
 - .zscripts/python-runtime-build.sh
-- request.ts
+- next-intl
 - tests/database-runtime-build.sh
 - Turn 14 — ASSISTANT
-- next.config.ts
+- context-menu.tsx
 - build.sh
 - mini-services-build.sh
 - mini-services-install.sh
@@ -339,18 +340,34 @@
 - tests/python-runtime-build.sh
 - python-runtime-container.sh
 - .zscripts/database-runtime-build.sh
+- correspondence/route.ts
+- rfis-view.tsx
+- toggle-group.tsx
+- 1. Non-Negotiable Core Laws
+- drawer.tsx
+- overdue.ts
+- navigation-menu.tsx
+- daily-report-view.tsx
+- Recipe 1: Adding a New Takeoff Calculator
+- auth-options.ts
+- daily-reports/[id]/route.ts
+- popover.tsx
+- tabs.tsx
+- avatar.tsx
+- use-mobile.ts
+- 4.1 Repository Pattern & Dependency Injection
 
 ## God Nodes (most connected - your core abstractions)
 1. `cn()` - 234 edges
-2. `requireUserId()` - 190 edges
-3. `getServices()` - 168 edges
+2. `requireUserId()` - 192 edges
+3. `getServices()` - 169 edges
 4. `notFound()` - 157 edges
 5. `json()` - 136 edges
 6. `writeAuditLog()` - 131 edges
 7. `verifyProjectOwnership()` - 130 edges
 8. `react` - 73 edges
-9. `conflict()` - 70 edges
-10. `withErrorHandler()` - 70 edges
+9. `withErrorHandler()` - 71 edges
+10. `conflict()` - 70 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Group G — UI Components (shadcn/ui wrappers)` --references--> `Sheet()`  [INFERRED]
@@ -367,71 +384,71 @@
 ## Import Cycles
 - None detected.
 
-## Communities (326 total, 140 thin omitted)
+## Communities (343 total, 140 thin omitted)
 
 ### Community 0 - "cn"
-Cohesion: 0.02
-Nodes (144): clsx, input-otp, @radix-ui/react-accordion, @radix-ui/react-alert-dialog, @radix-ui/react-avatar, @radix-ui/react-context-menu, @radix-ui/react-menubar, @radix-ui/react-navigation-menu (+136 more)
-
-### Community 1 - "dxf-viewer-view.tsx"
 Cohesion: 0.05
-Nodes (98): lucide-react, next-intl, @radix-ui/react-dialog, @radix-ui/react-select, sonner, @tanstack/react-query, Badge(), badgeVariants (+90 more)
+Nodes (65): cmdk, @radix-ui/react-tooltip, BreadcrumbEllipsis(), BreadcrumbItem(), BreadcrumbLink(), BreadcrumbList(), BreadcrumbPage(), BreadcrumbSeparator() (+57 more)
+
+### Community 1 - "react"
+Cohesion: 0.10
+Nodes (32): @radix-ui/react-slot, react, Badge(), badgeVariants, Dialog(), DialogContent(), DialogDescription(), DialogFooter() (+24 more)
 
 ### Community 2 - "fetchJson"
-Cohesion: 0.03
-Nodes (80): ClientViewRouter(), ActivitiesView(), ActivityRelationships(), BoQEditorView(), CalculatorsView(), CalendarView(), buildTransmittalHtml(), CorrespondenceDetailBody() (+72 more)
+Cohesion: 0.04
+Nodes (64): recharts, dynamic, Home(), ClientViewRouter(), BoQEditorView(), DocumentEditor(), CalculatorsView(), CalendarView() (+56 more)
 
 ### Community 3 - "requireUserId"
-Cohesion: 0.05
-Nodes (123): 3. Web-Specific Business Rules, GET, POST, RouteContext, ActivityDeleteSchema, DELETE, GET, PATCH (+115 more)
+Cohesion: 0.08
+Nodes (121): 3. Web-Specific Business Rules, GET, POST, RouteContext, DELETE, GET, PATCH, POST (+113 more)
 
 ### Community 4 - "doccontrol/entities.ts"
 Cohesion: 0.04
-Nodes (65): GET, POST, RouteContext, GET, POST, RouteContext, GET, POST (+57 more)
+Nodes (56): CorrespondenceDeleteSchema, CorrespondenceUpdateSchema, RouteContext, GET, RouteContext, POST, DrawingDeleteSchema, DrawingUpdateSchema (+48 more)
 
 ### Community 5 - "package.json"
-Cohesion: 0.03
-Nodes (55): name, private, version, @auth/prisma-adapter, bun-types, class-variance-authority, cmdk, date-fns (+47 more)
+Cohesion: 0.04
+Nodes (44): name, private, version, @auth/prisma-adapter, bun-types, date-fns, @dnd-kit/core, @dnd-kit/sortable (+36 more)
 
 ### Community 6 - "dependencies"
 Cohesion: 0.03
 Nodes (74): dependencies, @auth/prisma-adapter, bcryptjs, class-variance-authority, clsx, cmdk, date-fns, decimal.js (+66 more)
 
 ### Community 7 - "shared/entities.ts"
-Cohesion: 0.08
-Nodes (49): 4. Data Model (Web Adaptation), PaymentsListResponse, PaymentApplicationApi, ActivityProgressInput, DailyReportCreateInput, DailyReportDeleteResult, DailyReportDetail, DailyReportEquipmentInput (+41 more)
+Cohesion: 0.06
+Nodes (56): 4. Data Model (Web Adaptation), PaymentApplicationApi, ActivityProgressInput, DailyReportCreateInput, DailyReportDeleteResult, DailyReportDetail, DailyReportEquipmentInput, DailyReportManpowerInput (+48 more)
 
 ### Community 8 - "use-toast.ts"
-Cohesion: 0.08
-Nodes (31): @radix-ui/react-toast, src_app_globals, inter, jetbrainsMono, metadata, Providers(), ThemeProvider(), Toast (+23 more)
+Cohesion: 0.11
+Nodes (26): @radix-ui/react-toast, Toast, ToastAction, ToastActionElement, ToastClose, ToastDescription, ToastProps, src_components_ui_toast_toastprovider (+18 more)
 
-### Community 9 - "json"
-Cohesion: 0.10
-Nodes (29): next, LinkBodySchema, POST, GET, GET, POST, POST, RouteContext (+21 more)
+### Community 9 - "license/route.ts"
+Cohesion: 0.43
+Nodes (5): GET, POST, checkLicense(), LicenseCheckResult, startTrial()
 
 ### Community 10 - "scheduling-repositories.ts"
-Cohesion: 0.07
-Nodes (32): 5. Data Model (Web Adaptation), `Activity`, `ActivityRelationship`, `CalendarException`, `ProjectCalendar`, `WbsNode`, ActivityCreateInput, ActivityDeleteResult (+24 more)
+Cohesion: 0.08
+Nodes (26): ActivityCreateInput, ActivityDeleteResult, ActivityUpdateInput, ActivityUpdateResult, CalendarExceptionInput, CalendarMaskInput, CalendarUpsertInput, IActivityRepository (+18 more)
 
 ### Community 11 - "cpm.ts"
 Cohesion: 0.08
-Nodes (39): backwardBoundForLF(), BackwardBounds, backwardPass(), computeCriticalPath(), computeSchedule(), durationSpan(), forwardBoundForES(), ForwardBounds (+31 more)
+Nodes (40): backwardBoundForLF(), BackwardBounds, backwardPass(), computeCriticalPath(), computeSchedule(), durationSpan(), forwardBoundForES(), ForwardBounds (+32 more)
 
 ### Community 12 - "services.ts"
-Cohesion: 0.08
-Nodes (37): bcryptjs, next-auth, handler, SignUpSchema, GET, GET, POST, POST (+29 more)
+Cohesion: 0.06
+Nodes (56): 5. Adding New Features: Step-by-Step, ref_crypto, next, SignUpSchema, LinkBodySchema, GET, RouteContext, ALLOWED_MIME_TYPES (+48 more)
 
 ### Community 13 - "4. Component Stylings"
 Cohesion: 0.04
 Nodes (45): 1. Visual Theme & Atmosphere, 2. Color Palette & Roles, 3. Typography Rules, 4. Component Stylings, 5. Layout Principles, 6. Depth & Elevation, 7. Do's and Don'ts, 8. Responsive Behavior (+37 more)
 
-### Community 14 - "react"
-Cohesion: 0.11
-Nodes (26): Message, User, @radix-ui/react-scroll-area, react, ref_socket_io_client, Card(), CardAction(), CardContent() (+18 more)
+### Community 14 - "button.tsx"
+Cohesion: 0.14
+Nodes (21): Message, User, ref_socket_io_client, sonner, AuthGate(), Button(), Card(), CardAction() (+13 more)
 
 ### Community 15 - "commit/route.ts"
-Cohesion: 0.09
-Nodes (39): exceljs, @prisma/client, coerceNumeric(), computeAmount(), ParsedRow, parseRow(), POST, ResolvedIndices (+31 more)
+Cohesion: 0.07
+Nodes (47): exceljs, ref_fs, ref_path, @prisma/client, DXF_FILENAME_EXTENSIONS, DXF_MIME_TYPES, generateFixtureDxf(), GET (+39 more)
 
 ### Community 16 - "Components"
 Cohesion: 0.05
@@ -454,12 +471,12 @@ Cohesion: 0.05
 Nodes (41): Border Radius Scale, Brand & Accent, Breakpoints, Buttons, Cards, Collapsing Strategy, Colors, Components (+33 more)
 
 ### Community 21 - "drawing-repository.ts"
-Cohesion: 0.08
-Nodes (25): DrawingApi, DrawingRevisionApi, DrawingRevisionEventApi, DrawingApi, DxfApiResponse, DrawingCreateInput, DrawingDeleteResult, DrawingRevisionCreateInput (+17 more)
+Cohesion: 0.09
+Nodes (19): DrawingRevisionApi, DrawingRevisionEventApi, DrawingDeleteResult, DrawingRevisionCreateInput, DrawingRevisionEventCreateInput, DrawingUpdateInput, DrawingUpdateResult, IDrawingRepository (+11 more)
 
-### Community 22 - "badRequest"
-Cohesion: 0.07
-Nodes (34): ref_crypto, ref_fs, ref_path, DXF_FILENAME_EXTENSIONS, DXF_MIME_TYPES, generateFixtureDxf(), GET, looksLikeDxfFile() (+26 more)
+### Community 22 - "payments/[id]/route.ts"
+Cohesion: 0.21
+Nodes (10): isoDate, PaymentDeleteSchema, PaymentUpdateSchema, RouteContext, PaymentCreateBodySchema, RouteContext, PaymentAdditionInputSchema, PaymentDeductionInputSchema (+2 more)
 
 ### Community 23 - "bmw/DESIGN.md"
 Cohesion: 0.05
@@ -546,12 +563,12 @@ Cohesion: 0.05
 Nodes (39): Border Radius Scale, Brand & Accent, Breakpoints, Buttons, Cards & Containers, Collapsing Strategy, Colors, Components (+31 more)
 
 ### Community 44 - "scripts"
-Cohesion: 0.09
-Nodes (16): scripts, build, db:generate, db:migrate, db:push, db:reset, db:seed, dev (+8 more)
+Cohesion: 0.13
+Nodes (15): scripts, build, db:generate, db:migrate, db:push, db:reset, db:seed, dev (+7 more)
 
 ### Community 45 - "dxf.ts"
-Cohesion: 0.08
-Nodes (28): EntityRendererProps, fitToView(), modelToScreen(), screenToModel(), DxfArcEntitySchema, DxfCircleEntitySchema, DxfDimensionEntitySchema, DxfDrawing (+20 more)
+Cohesion: 0.07
+Nodes (34): DrawingApi, DrawingApi, DxfApiResponse, EntityRendererProps, fitToView(), modelToScreen(), screenToModel(), DrawingCreateInput (+26 more)
 
 ### Community 46 - "DESIGN.md"
 Cohesion: 0.05
@@ -629,9 +646,9 @@ Nodes (37): Border Radius Scale, Brand & Accent, Breakpoints, Buttons, Cards & C
 Cohesion: 0.05
 Nodes (37): Border Radius Scale, Brand & Accent, Breakpoints, Buttons, Cards & Containers, Collapsing Strategy, Colors, Components (+29 more)
 
-### Community 65 - "submittal-repository.ts"
-Cohesion: 0.11
-Nodes (18): 5. Data Model (Web Adaptation), SubmittalApi, SubmittalEventApi, ISubmittalRepository, SubmittalCreateInput, SubmittalDeleteResult, SubmittalEventCreateInput, SubmittalUpdateInput (+10 more)
+### Community 65 - "doccontrol-repositories.ts"
+Cohesion: 0.13
+Nodes (17): SubmittalApi, SubmittalEventApi, ISubmittalRepository, SubmittalCreateInput, SubmittalDeleteResult, SubmittalEventCreateInput, SubmittalUpdateInput, SubmittalUpdateResult (+9 more)
 
 ### Community 66 - "meta/DESIGN.md"
 Cohesion: 0.05
@@ -711,11 +728,11 @@ Nodes (35): Border Radius Scale, Brand & Accent, Breakpoints, Buttons, Cards & C
 
 ### Community 85 - "boq-editor-view.tsx"
 Cohesion: 0.06
-Nodes (33): @radix-ui/react-tabs, Tabs(), TabsContent(), TabsList(), TabsTrigger(), InlineDurationEdit(), BoQDocument, BoQItem (+25 more)
+Nodes (38): @tanstack/react-query, ActivitiesView(), ActivityRelationships(), BoQDocument, BoQItem, BoQSection, CreateDocumentButton(), CreateItemButton() (+30 more)
 
 ### Community 86 - "rfi-repository.ts"
 Cohesion: 0.10
-Nodes (18): RfiApi, RfiEventApi, IRfiRepository, RfiAnswerInput, RfiAnswerResult, RfiCreateInput, RfiDeleteResult, RfiEventCreateInput (+10 more)
+Nodes (19): 5. Data Model (Web Adaptation), RfiApi, RfiEventApi, IRfiRepository, RfiAnswerInput, RfiAnswerResult, RfiCreateInput, RfiDeleteResult (+11 more)
 
 ### Community 87 - "vitest"
 Cohesion: 0.10
@@ -741,8 +758,8 @@ Nodes (33): Border Radius Scale, Brand & Accent, Breakpoints, Buttons, Cards & C
 Cohesion: 0.06
 Nodes (33): Border Radius Scale, Brand & Accent, Breakpoints, Buttons, Cards & Containers, Collapsing Strategy, Colors, Components (+25 more)
 
-### Community 93 - "doccontrol-repositories.ts"
-Cohesion: 0.12
+### Community 93 - "correspondence-repository.ts"
+Cohesion: 0.11
 Nodes (17): CorrespondenceApi, LatestCorrespondenceItem, CorrespondenceCreateInput, CorrespondenceDeleteResult, CorrespondenceUpdateInput, CorrespondenceUpdateResult, ICorrespondenceRepository, TransmittalLineCreateInput (+9 more)
 
 ### Community 94 - "wise/DESIGN.md"
@@ -750,8 +767,8 @@ Cohesion: 0.06
 Nodes (32): Border Radius Scale, Brand & Accent, Brand Accent — Tertiary, Breakpoints, Buttons, Cards & Containers, Colors, Components (+24 more)
 
 ### Community 95 - "prisma/rate-analysis-repository.ts"
-Cohesion: 0.13
-Nodes (16): IRateAnalysisRepository, RateAnalysisCreateInput, RateAnalysisLineInput, RateAnalysisUpdateInput, RateAnalysisUpdateResult, ConcurrencyConflict, lineToPrismaData(), lineToPrismaDataWithoutId() (+8 more)
+Cohesion: 0.18
+Nodes (14): RateAnalysisCreateInput, RateAnalysisLineInput, RateAnalysisUpdateInput, RateAnalysisUpdateResult, ConcurrencyConflict, lineToPrismaData(), lineToPrismaDataWithoutId(), mapAnalysisToEntity() (+6 more)
 
 ### Community 96 - "Components"
 Cohesion: 0.06
@@ -769,41 +786,41 @@ Nodes (31): Border Radius Scale, Brand & Accent, Breakpoints, Buttons, Cards & C
 Cohesion: 0.06
 Nodes (31): Content, Content, Content, Content, Content, Content, Content, Content (+23 more)
 
-### Community 100 - "IAiProvider"
-Cohesion: 0.08
-Nodes (27): 1.3 AI Proposes, Engineer Approves (§3), 5.1 Hard Cannot-Do's (architectural), 10. Glossary, 3. Locked Decisions (do not revisit without explicit owner decision), 10. What This Document Guarantees, 1. The Core Idea, 3.1 `IAiProvider` — AI service abstraction, 3.2 `IFileStorage` — Blob storage abstraction (+19 more)
+### Community 100 - "TechOffice — Platform Portability Guide"
+Cohesion: 0.12
+Nodes (15): 10. What This Document Guarantees, 1. The Core Idea, 3.1 `IAiProvider` — AI service abstraction, 3.2 `IFileStorage` — Blob storage abstraction, 3.3 `IAuthProvider` — Authentication abstraction, 3.4 `IExportRenderer` — PDF/Excel rendering abstraction, 3. Provider Interface Definitions, 5.1 What stays identical (the ~85%) (+7 more)
 
 ### Community 101 - "ENTITY-RELATIONSHIP DESIGN — v1.1 (Web Adaptation)"
 Cohesion: 0.06
 Nodes (30): 11. Approval & Next Steps, 1. Storage Architecture, 2. Global Conventions (apply to every model), 3.1 User & Auth, 3.2 User Settings, Company Profile, Subscription, 3.3 File Uploads (attachments — logos, future drawings, etc.), 3.4 Audit Log, 3. Phase 1 Models — App-Level (per-user, no Project FK) (+22 more)
 
-### Community 102 - "dxf-parser.ts"
-Cohesion: 0.12
-Nodes (23): dxf, calculateExtents(), convertEntity(), entityExtremePoints(), extractEntities(), extractLayers(), num(), ParsedDxf (+15 more)
+### Community 102 - "worklog.md"
+Cohesion: 0.11
+Nodes (26): dxf, CreateFormState, ProjectCreated, calculateExtents(), convertEntity(), entityExtremePoints(), extractEntities(), extractLayers() (+18 more)
 
-### Community 103 - "export-view.tsx"
-Cohesion: 0.10
-Nodes (19): @radix-ui/react-checkbox, @radix-ui/react-switch, Checkbox(), Switch(), CalendarExceptionApi, CalendarResponse, DEFAULT_MASK, MaskKey (+11 more)
+### Community 103 - "dxf-viewer-view.tsx"
+Cohesion: 0.06
+Nodes (37): lucide-react, Checkbox(), Select(), SelectContent(), SelectItem(), SelectTrigger(), SelectValue(), CalendarExceptionApi (+29 more)
 
-### Community 104 - "answer/route.ts"
-Cohesion: 0.50
-Nodes (4): AnswerSchema, POST, RouteContext, canTransitionRfiStatus()
+### Community 104 - "utils.ts"
+Cohesion: 0.05
+Nodes (24): clsx, input-otp, @radix-ui/react-accordion, @radix-ui/react-hover-card, @radix-ui/react-progress, @radix-ui/react-radio-group, @radix-ui/react-slider, @radix-ui/react-switch (+16 more)
 
 ### Community 105 - "scheduling/entities.ts"
-Cohesion: 0.09
-Nodes (22): GET, PUT, RouteContext, ActivityCreate, ActivityUpdate, CalendarExceptionAdd, CalendarExceptionAddSchema, CalendarExceptionInput (+14 more)
+Cohesion: 0.07
+Nodes (28): ActivityDeleteSchema, RouteContext, RouteContext, RouteContext, RouteContext, ActivityCreate, ActivityCreateSchema, ActivityUpdate (+20 more)
 
-### Community 106 - "PrismaProjectRepository"
-Cohesion: 0.22
-Nodes (9): STEP 4: Create the Desktop Service Registry, ProjectCreateInput, ProjectDeleteResult, ProjectListOptions, ProjectUpdateInput, ProjectUpdateResult, buildWhereClause(), mapToEntity() (+1 more)
-
-### Community 107 - "registry.ts"
-Cohesion: 0.14
-Nodes (18): `ScheduleActivity`, `ScheduleRun`, What changes for web:, IScheduleRepository, ScheduleRunContext, ScheduleRunWithActivities, mapActivity(), mapRun() (+10 more)
-
-### Community 108 - "worklog.md"
+### Community 106 - "Project"
 Cohesion: 0.16
-Nodes (16): CreateFormState, ProjectCreated, useApiMutation(), AiCompletionRequest, AiCompletionResponse, AiMessage, AiMessageRole, AiProviderError (+8 more)
+Nodes (10): IProjectRepository, ProjectCreateInput, ProjectDeleteResult, ProjectListOptions, ProjectUpdateInput, ProjectUpdateResult, buildWhereClause(), mapToEntity() (+2 more)
+
+### Community 107 - "Services"
+Cohesion: 0.12
+Nodes (20): 5. Data Model (Web Adaptation), `Activity`, `ActivityRelationship`, `CalendarException`, `ProjectCalendar`, `ScheduleActivity`, `ScheduleRun`, What changes for web: (+12 more)
+
+### Community 108 - "IAiProvider"
+Cohesion: 0.09
+Nodes (27): 1.3 AI Proposes, Engineer Approves (§3), 5.1 Hard Cannot-Do's (architectural), 5.2 Soft Cannot-Do's (workable but degraded), 5. Honest "Cannot Do in Web MVP" List, 10. Glossary, 3. Locked Decisions (do not revisit without explicit owner decision), 4.1 Provider Registry (where the wiring happens), 4. Concrete Implementations (web MVP, Phase 1) (+19 more)
 
 ### Community 109 - "calculators-view.tsx"
 Cohesion: 0.08
@@ -817,9 +834,9 @@ Nodes (13): IItemLibraryRepository, LibraryItemCreateInput, LibraryItemSearchOpt
 Cohesion: 0.07
 Nodes (27): 4. Smoke test on ANY folder that contains code:, Content, Content, Content, Content, Content, Content, Content (+19 more)
 
-### Community 112 - "planned-value.ts"
-Cohesion: 0.13
-Nodes (21): ActivityEarnedValue, ActivityProgress, computeEarnedValue(), EarnedValueResult, money(), ONE_HUNDRED, computeCumulativePV(), computeDailyPlannedValue() (+13 more)
+### Community 112 - "project-dashboard/route.ts"
+Cohesion: 0.12
+Nodes (29): GET, parseIsoDate(), RouteContext, todayIsoUtc(), isFinalRfiStatus(), isFinalSubmittalStatus(), ActivityEarnedValue, ActivityProgress (+21 more)
 
 ### Community 113 - "import-view.tsx"
 Cohesion: 0.09
@@ -830,16 +847,16 @@ Cohesion: 0.13
 Nodes (15): BCRYPT_COST, MIN_PASSWORD_LENGTH, NextAuthProvider, normalizeEmail(), SESSION_LIFETIME_MS, toAuthSession(), AuthCredentials, AuthError (+7 more)
 
 ### Community 115 - "wbs-repository.ts"
-Cohesion: 0.16
-Nodes (9): IWbsRepository, WbsNodeCreateInput, WbsNodeDeleteResult, WbsNodeUpdateInput, WbsNodeUpdateResult, mapToEntity(), PrismaWbsNodeRow, PrismaWbsRepository (+1 more)
+Cohesion: 0.15
+Nodes (10): `WbsNode`, IWbsRepository, WbsNodeCreateInput, WbsNodeDeleteResult, WbsNodeUpdateInput, WbsNodeUpdateResult, mapToEntity(), PrismaWbsNodeRow (+2 more)
 
-### Community 116 - "2. Core API Endpoints"
-Cohesion: 0.20
-Nodes (13): 1. Overview & Conventions, 2.1 Projects, 2.2 Bill of Quantities (BoQ), 2.3 Rate Analysis & Item Library, 2.4 CPM Scheduling Engine, 2.5 Calculations & Takeoff, 2.6 Document Control & DXF, 2. Core API Endpoints (+5 more)
+### Community 116 - "POST"
+Cohesion: 0.11
+Nodes (21): 1. Overview & Conventions, 2.1 Projects, 2.2 Bill of Quantities (BoQ), 2.3 Rate Analysis & Item Library, 2.4 CPM Scheduling Engine, 2.5 Calculations & Takeoff, 2.6 Document Control & DXF, 2. Core API Endpoints (+13 more)
 
 ### Community 117 - "variation-repository.ts"
-Cohesion: 0.14
-Nodes (13): VariationsListResponse, VariationApi, IVariationRepository, VariationApproveInput, VariationCreateInput, VariationDeleteResult, VariationUpdateInput, VariationUpdateResult (+5 more)
+Cohesion: 0.15
+Nodes (12): VariationApi, IVariationRepository, VariationApproveInput, VariationCreateInput, VariationDeleteResult, VariationUpdateInput, VariationUpdateResult, mapVariation() (+4 more)
 
 ### Community 118 - "Design System Inspired by Kraken"
 Cohesion: 0.08
@@ -853,9 +870,9 @@ Nodes (23): compilerOptions, allowJs, esModuleInterop, incremental, isolatedModu
 Cohesion: 0.09
 Nodes (22): 1. Library & Licensing (UNCHANGED), 1. Scope (UNCHANGED), 2. Entity Support Matrix (UNCHANGED), 2. New Domain Law — Constitution Amendment #2 (UNCHANGED), 3. Business Rules (UNCHANGED), 3. Web Adaptation for DXF Viewer, 4. Business Rules (UNCHANGED), 4. Golden Tests (UNCHANGED — hand-computed, the law) (+14 more)
 
-### Community 121 - "zod"
-Cohesion: 0.10
-Nodes (37): zod, ActivityLite, BoQItemLite, GET, POST, ReplaceAllocationsBodySchema, RouteContext, GET (+29 more)
+### Community 121 - "domain/payments/cost-loading.ts"
+Cohesion: 0.24
+Nodes (11): computeActivityPlannedCost(), computeCoverage(), money(), ONE_HUNDRED, validateAllocations(), AllocationInput, AllocationInputSchema, BoqItemAmount (+3 more)
 
 ### Community 122 - "estimating/rate-analysis.ts"
 Cohesion: 0.13
@@ -870,12 +887,12 @@ Cohesion: 0.08
 Nodes (23): 11. Open Questions (TBD — owner decides), 12. What v1.1 Does NOT Change (the spirit, preserved), 13. Approval & Next Steps, 1. What This Product Is, 2. Target Users, 4. Architecture — The Law of Layers, 5. Data Architecture, 6.1 Design Language Selection (+15 more)
 
 ### Community 125 - "PHASE 1 FUNCTIONAL SPEC — BoQ Module (Web Adaptation)"
-Cohesion: 0.12
-Nodes (16): 10. Phase 1 Exit Criteria (Web Adaptation), 11. Open Items Affecting Phase 1 Build (need your input, not blocking), 1. Scope, 2. Feature Inventory, 3. User Stories & Acceptance Criteria, 5. Business Rules (calculation law), 6. Golden Test Cases (authoritative — tests must reproduce these exactly), 8. Export Layouts (contract for the export engine) (+8 more)
+Cohesion: 0.07
+Nodes (27): 10. Phase 1 Exit Criteria (Web Adaptation), 11. Open Items Affecting Phase 1 Build (need your input, not blocking), 1. Scope, 2. Feature Inventory, 3. User Stories & Acceptance Criteria, 4. Screen Specifications, 5. Business Rules (calculation law), 6. Golden Test Cases (authoritative — tests must reproduce these exactly) (+19 more)
 
 ### Community 126 - "dropdown-menu.tsx"
-Cohesion: 0.06
-Nodes (29): next-themes, @radix-ui/react-dropdown-menu, dynamic, Home(), AppShell(), AppShellProps, AppSidebar(), NAV_GROUPS (+21 more)
+Cohesion: 0.12
+Nodes (15): @radix-ui/react-dropdown-menu, emptySubscribe(), LanguageToggle(), LOCALE_OPTIONS, DropdownMenu(), DropdownMenuCheckboxItem(), DropdownMenuContent(), DropdownMenuItem() (+7 more)
 
 ### Community 127 - "decimal.js"
 Cohesion: 0.15
@@ -889,17 +906,17 @@ Nodes (6): CalculationRecordCreateInput, ICalculationRepository, mapToEntity(), 
 Cohesion: 0.10
 Nodes (19): AI Design + Build Ecosystem Tools, AI & LLM Platforms, Automotive, Awesome DESIGN.md, Backend, Database & DevOps, Collection, Contributing, Design & Creative Tools (+11 more)
 
-### Community 130 - "Project"
-Cohesion: 0.22
+### Community 130 - "IRateAnalysisRepository"
+Cohesion: 0.14
 Nodes (20): 3.1 Authentication & Tenancy, 3.2 Projects & Bill of Quantities, 3.3 Reference Catalog & Takeoff, 3.4 CPM Scheduling, 3.5 Governance & Audit, 3. Core Database Entities, 4. "What Changes vs. What Stays" — Per Phase 1 Feature, 10. v1.1 vs v1.0 Diff Summary (+12 more)
 
 ### Community 131 - "compilerOptions"
 Cohesion: 0.10
 Nodes (19): ./tsconfig.json, compilerOptions, esModuleInterop, isolatedModules, jsx, lib, module, moduleResolution (+11 more)
 
-### Community 132 - "ServiceContainer"
-Cohesion: 0.16
-Nodes (8): IDailyReportRepository, equipmentCreateData(), manpowerCreateData(), mapReport(), PrismaDailyReportRepository, workDoneCreateData(), ServiceContainer, DailyReport
+### Community 132 - "correspondence-view.tsx"
+Cohesion: 0.08
+Nodes (23): @radix-ui/react-dialog, Sheet(), SheetContent(), SheetDescription(), SheetHeader(), SheetTitle(), ActivitiesListResponse, ActivityApi (+15 more)
 
 ### Community 133 - "Part 4B — Cost-Schedule Integration, Progress, Reports & AI"
 Cohesion: 0.11
@@ -925,9 +942,9 @@ Nodes (17): 0. Global Rules (every WO obeys these), 1. Work-Order Sequence, 2. P
 Cohesion: 0.19
 Nodes (12): @radix-ui/react-label, react-hook-form, FormControl(), FormDescription(), FormFieldContext, FormFieldContextValue, FormItem(), FormItemContext (+4 more)
 
-### Community 139 - "progress-repository.ts"
-Cohesion: 0.22
-Nodes (9): IProgressRepository, ProgressCreateInput, ProgressUpdateDetail, mapProgress(), mapUpdate(), PrismaProgressRepository, PrismaProgressUpdateRow, ActivityProgress (+1 more)
+### Community 139 - "registry.ts"
+Cohesion: 0.18
+Nodes (12): IProgressRepository, ProgressCreateInput, ProgressUpdateDetail, mapProgress(), mapUpdate(), PrismaProgressRepository, PrismaProgressUpdateRow, getContainer() (+4 more)
 
 ### Community 140 - "Changelog"
 Cohesion: 0.12
@@ -938,8 +955,8 @@ Cohesion: 0.10
 Nodes (19): 1. Scope, 2. Web Adaptation Notes, 3. Business Rules (calculation law) — UNCHANGED, 4. Golden Test Cases (authoritative — UNCHANGED), 6. Screen Specifications (Web Adaptation), 7. Implementation Work Orders (Phase 2), 8. Exit Criteria, Group J — Domain Core (CPM Engine) — sequential (+11 more)
 
 ### Community 142 - "domain/scheduling/calendar.ts"
-Cohesion: 0.27
-Nodes (16): workingDaysBetween(), addDays(), civilFromDays(), daysFromCivil(), formatIsoDate(), getWorkingDayIndex(), indexToDate(), isWorking() (+8 more)
+Cohesion: 0.29
+Nodes (15): workingDaysBetween(), addDays(), civilFromDays(), daysFromCivil(), formatIsoDate(), getWorkingDayIndex(), indexToDate(), isWorking() (+7 more)
 
 ### Community 143 - "Changelog"
 Cohesion: 0.12
@@ -958,20 +975,20 @@ Cohesion: 0.10
 Nodes (20): 1.1 Layer Purity (§3.3), 1.2 Golden Tests Are Law (§3), 1.4 Data Never Hostage (§3), 1.5 Bilingual EN/AR with RTL (§3), 1.6 Linear Design Language (Amendment #6), 1. Constitution v1.1 — Non-Negotiables, 2. Business Rules Compliance, 4. Performance (+12 more)
 
 ### Community 147 - "TechOffice — Electron → Next.js 16 Adaptation Guide"
-Cohesion: 0.13
-Nodes (14): 10. Approval & Next Steps, 1. Why This Document Exists, 2. Side-by-Side Translation Table, 3.1 Mermaid Diagram, 3.2 ASCII Variant (for environments without Mermaid rendering), 3.3 Layer Purity Rules (mechanically enforced by eslint), 3. Platform-Agnostic Architecture, 5.2 Soft Cannot-Do's (workable but degraded) (+6 more)
+Cohesion: 0.15
+Nodes (12): 10. Approval & Next Steps, 1. Why This Document Exists, 2. Side-by-Side Translation Table, 3.1 Mermaid Diagram, 3.2 ASCII Variant (for environments without Mermaid rendering), 3.3 Layer Purity Rules (mechanically enforced by eslint), 3. Platform-Agnostic Architecture, 6. Migration Path (Web MVP → Electron Desktop) (+4 more)
 
 ### Community 148 - "carousel.tsx"
 Cohesion: 0.17
 Nodes (14): embla-carousel-react, Carousel(), CarouselApi, CarouselContent(), CarouselContext, CarouselContextProps, CarouselItem(), CarouselNext() (+6 more)
 
-### Community 149 - "IBoQRepository"
+### Community 149 - "repositories/index.ts"
 Cohesion: 0.07
 Nodes (25): DocumentsResponse, ItemsResponse, PreviewData, SectionsResponse, BoQDocumentCreateInput, BoQDocumentDeleteResult, BoQItemCreateInput, BoQItemDeleteResult (+17 more)
 
 ### Community 150 - "WHAT TO DO: Step-by-Step"
-Cohesion: 0.09
-Nodes (21): ESTIMATED EFFORT, GOLDEN RULES FOR THE DESKTOP AGENT, PROJECT CONTEXT, Repository, STEP 0: Verify the Existing Project Works, STEP 10: Update package.json Scripts, STEP 11: File Upload Adaptation, STEP 12: PDF Export Adaptation (+13 more)
+Cohesion: 0.08
+Nodes (22): ESTIMATED EFFORT, GOLDEN RULES FOR THE DESKTOP AGENT, PROJECT CONTEXT, Repository, STEP 0: Verify the Existing Project Works, STEP 10: Update package.json Scripts, STEP 11: File Upload Adaptation, STEP 12: PDF Export Adaptation (+14 more)
 
 ### Community 151 - "calculations/route.ts"
 Cohesion: 0.22
@@ -993,37 +1010,37 @@ Nodes (12): 1. Constitution v1.0 — Turn 16 (9,648 chars), 2. Phase 1 Functiona
 Cohesion: 0.20
 Nodes (9): 1. Overview, 2. Datasource & Connection Pooling, 4. Key Schema Conventions, 5. Seed Data & Migrations, Auto-Sanitization (`src/lib/db.ts`), Connection String Setup, Running Migrations, Seeding Reference Data (+1 more)
 
-### Community 156 - "project-dashboard-view.tsx"
-Cohesion: 0.15
-Nodes (13): recharts, ChartConfig, ChartContainer(), ChartContext, ChartContextProps, ChartLegendContent(), ChartTooltipContent(), getPayloadConfigFromPayload() (+5 more)
+### Community 156 - "chart.tsx"
+Cohesion: 0.25
+Nodes (9): ChartConfig, ChartContainer(), ChartContext, ChartContextProps, ChartLegendContent(), ChartTooltipContent(), getPayloadConfigFromPayload(), THEMES (+1 more)
 
 ### Community 157 - "library/route.ts"
-Cohesion: 0.20
-Nodes (10): GET, POST, LibraryItemCreate, LibraryItemCreateSchema, LibraryItemScope, LibraryItemScopeSchema, LibraryItemSearch, LibraryItemSearchSchema (+2 more)
+Cohesion: 0.24
+Nodes (8): LibraryItemCreate, LibraryItemCreateSchema, LibraryItemScope, LibraryItemScopeSchema, LibraryItemSearch, LibraryItemSearchSchema, LibraryItemUpdate, LibraryItemUpdateSchema
 
 ### Community 158 - "projects/route.ts"
-Cohesion: 0.20
-Nodes (10): GET, POST, ProjectCreateInput, ProjectCreateSchema, ProjectDeleteInput, ProjectDeleteSchema, ProjectListQuery, ProjectListQuerySchema (+2 more)
+Cohesion: 0.24
+Nodes (8): ProjectCreateInput, ProjectCreateSchema, ProjectDeleteInput, ProjectDeleteSchema, ProjectListQuery, ProjectListQuerySchema, ProjectUpdateInput, ProjectUpdateSchema
 
 ### Community 159 - "markup-overlay.tsx"
-Cohesion: 0.16
-Nodes (13): ArrowMarkup, CloudMarkup, createArrowMarkup(), createCloudMarkup(), createTextMarkup(), Markup, MarkupBase, MarkupOverlay() (+5 more)
+Cohesion: 0.13
+Nodes (18): ArrowMarkup, CloudMarkup, createArrowMarkup(), createCloudMarkup(), createTextMarkup(), Markup, MarkupBase, MarkupOverlay() (+10 more)
 
 ### Community 160 - "rebar.ts"
 Cohesion: 0.24
 Nodes (10): RebarCalculator(), computeRebar(), formatLength(), formatTon(), formatWeight(), RebarResult, ALL_REBAR_DIAMETERS, getRebarWeight() (+2 more)
 
-### Community 161 - "4. Screen Specifications"
-Cohesion: 0.20
-Nodes (10): 4. Screen Specifications, S1 — App Shell, S2 — Dashboard, S3 — BoQ Editor, S4 — Item Editor (Drawer), S5 — Rate Analysis Builder, S6 — Calculators Hub, S7 — Library Browser (+2 more)
+### Community 161 - "zod"
+Cohesion: 0.09
+Nodes (22): zod, ActivityLite, BoQItemLite, ReplaceAllocationsBodySchema, RouteContext, DailyReportCreateBodySchema, EquipmentInputSchema, ManpowerInputSchema (+14 more)
 
 ### Community 162 - "websocket/server.ts"
 Cohesion: 0.22
 Nodes (10): createSystemMessage(), createUserMessage(), generateMessageId(), httpServer, io, Message, User, users (+2 more)
 
 ### Community 163 - "seed.ts"
-Cohesion: 0.05
-Nodes (36): 1. Overview, 2. Environment Variables Checklist, 3.1 Automatic Git Deployments, 3.2 Build Settings, 3.3 Deploying via Vercel CLI, 3. Vercel Deployment, 4. Post-Deployment Database Initialization, TechOffice Deployment Guide (+28 more)
+Cohesion: 0.04
+Nodes (43): 1. Development Philosophy, 2. Setting Up Your Environment, 3. Git Workflow & Branching Strategy, 4. Code Standards & Quality Gates, 6. Pull Request Checklist, Contributing to TechOffice, Making Changes, 1. Overview (+35 more)
 
 ### Community 164 - "Section Definitions"
 Cohesion: 0.20
@@ -1033,21 +1050,21 @@ Nodes (9): 1. Query Performance (query), 2. Connection Management (conn), 3. Sec
 Cohesion: 0.24
 Nodes (9): buildHtml(), CoverData, escapeHtml(), ExportPdfBody, ExportPdfBodySchema, POST, SectionBlock, SummaryRow (+1 more)
 
-### Community 166 - "addDays"
-Cohesion: 0.29
-Nodes (7): addDays(), computeOverdueState(), daysBetween(), humanStatus(), StatusChangeMenu(), SubmittalDetailBody(), SubmittalStatusBadge()
+### Community 166 - "submittals-view.tsx"
+Cohesion: 0.14
+Nodes (16): addDays(), computeOverdueState(), daysBetween(), DISCIPLINES, FINAL_SUBMITTAL_STATUSES, humanStatus(), StatusChangeMenu(), SUBMITTAL_STATUSES (+8 more)
 
-### Community 167 - "gt-dxf-2-measurements.test.ts"
-Cohesion: 0.57
-Nodes (5): distance(), perimeter(), polygonArea(), polylineLength(), CORNERS_CCW
+### Community 167 - "alert-dialog.tsx"
+Cohesion: 0.09
+Nodes (20): @radix-ui/react-alert-dialog, react-day-picker, AlertDialogAction(), AlertDialogCancel(), AlertDialogContent(), AlertDialogDescription(), AlertDialogFooter(), AlertDialogHeader() (+12 more)
 
 ### Community 169 - "full-conversation.md"
 Cohesion: 0.29
 Nodes (6): 1. Install (pick one), 2. Open a NEW terminal, then confirm the CLI responds:, 3. Wire it to your AI coding tool (it will ask which — Claude Code, Cursor, etc.):, On the machine that has it — push to GitHub (PRIVATE repo — commercial product, never public), On the other machine, or Windows PowerShell: irm https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.ps1 | iex
 
-### Community 170 - "IProjectRepository"
-Cohesion: 0.08
-Nodes (18): 1. Domain Layer (`src/domain/`) — UNTOUCHED, 2. Shared Layer (`src/shared/`) — UNTOUCHED, 3. Repository Interfaces (`src/domain/repositories/`) — UNTOUCHED, 4. React Components (`src/components/`) — MOSTLY UNTOUCHED, 5. Constitution Rules — MUST BE ENFORCED, WHAT MUST NOT CHANGE, 4.1 Repository Pattern & Dependency Injection, 4.2 Optimistic Concurrency Control (OCC) (+10 more)
+### Community 170 - "2. Repository Interface Definitions"
+Cohesion: 0.14
+Nodes (13): 1. Domain Layer (`src/domain/`) — UNTOUCHED, 2. Shared Layer (`src/shared/`) — UNTOUCHED, 3. Repository Interfaces (`src/domain/repositories/`) — UNTOUCHED, 4. React Components (`src/components/`) — MOSTLY UNTOUCHED, 5. Constitution Rules — MUST BE ENFORCED, WHAT MUST NOT CHANGE, 2.1 `IProjectRepository`, 2.2 `IBoQRepository` (+5 more)
 
 ### Community 171 - "copy-assets.js"
 Cohesion: 0.29
@@ -1085,6 +1102,10 @@ Nodes (3): main(), mini-services-start.sh script, start.sh script
 Cohesion: 0.33
 Nodes (5): How to Use, References, Rule Categories by Priority, Supabase Postgres Best Practices, When to Apply
 
+### Community 180 - "menubar.tsx"
+Cohesion: 0.11
+Nodes (12): @radix-ui/react-menubar, Menubar(), MenubarCheckboxItem(), MenubarContent(), MenubarItem(), MenubarLabel(), MenubarRadioItem(), MenubarSeparator() (+4 more)
+
 ### Community 181 - "paint.ts"
 Cohesion: 0.40
 Nodes (5): PaintCalculator(), computePaint(), formatArea(), PaintResult, PaintCalculatorInput
@@ -1101,9 +1122,9 @@ Nodes (4): Conclusion, Detailed Mapping, Document Inventory — Verification Rep
 Cohesion: 0.80
 Nodes (4): has_python_sources(), install_pyproject(), install_requirements(), python-runtime-build.sh script
 
-### Community 185 - "request.ts"
-Cohesion: 0.50
-Nodes (3): defaultLocale, Locale, locales
+### Community 185 - "next-intl"
+Cohesion: 0.07
+Nodes (24): nextConfig, withNextIntl, next-intl, next-themes, src_app_globals, inter, jetbrainsMono, metadata (+16 more)
 
 ### Community 186 - "tests/database-runtime-build.sh"
 Cohesion: 0.50
@@ -1113,25 +1134,89 @@ Nodes (3): DB_PUSH_CALLS, PATH, database-runtime-build.sh script
 Cohesion: 0.67
 Nodes (3): Content, Development Tooling — CodeGraph, Turn 14 — ASSISTANT
 
+### Community 188 - "context-menu.tsx"
+Cohesion: 0.12
+Nodes (10): @radix-ui/react-context-menu, ContextMenuCheckboxItem(), ContextMenuContent(), ContextMenuItem(), ContextMenuLabel(), ContextMenuRadioItem(), ContextMenuSeparator(), ContextMenuShortcut() (+2 more)
+
+### Community 327 - "correspondence/route.ts"
+Cohesion: 0.21
+Nodes (12): RouteContext, RouteContext, RouteContext, extractSeq(), formatRef(), maxSeq(), nextCorrespondenceRef(), nextRfiRef() (+4 more)
+
+### Community 328 - "rfis-view.tsx"
+Cohesion: 0.17
+Nodes (11): addDays(), computeOverdueState(), daysBetween(), DrawingOption, DrawingsListResponse, FINAL_RFI_STATUSES, RfiDetailBody(), RfiDetailResponse (+3 more)
+
+### Community 329 - "toggle-group.tsx"
+Cohesion: 0.18
+Nodes (12): class-variance-authority, @radix-ui/react-toggle, @radix-ui/react-toggle-group, Alert(), AlertDescription(), AlertTitle(), alertVariants, ToggleGroup() (+4 more)
+
+### Community 330 - "1. Non-Negotiable Core Laws"
+Cohesion: 0.15
+Nodes (12): 1. Non-Negotiable Core Laws, 2. Standard Quality Gates & Verification Commands, 3. Graphify Knowledge Graph Rules, 4. Architectural Map & Key Interfaces, 5. Coding Conventions, Law 1: The Law of Layers (Domain Purity), Law 2: Golden Tests Are Immutable Law, Law 3: Financial & Measurement Precision (+4 more)
+
+### Community 331 - "drawer.tsx"
+Cohesion: 0.17
+Nodes (7): vaul, DrawerContent(), DrawerDescription(), DrawerFooter(), DrawerHeader(), DrawerOverlay(), DrawerTitle()
+
+### Community 332 - "overdue.ts"
+Cohesion: 0.36
+Nodes (8): calculateDueDate(), daysOverdue(), fromUnixDays(), isOverdue(), parseIso(), toUnixDays(), RfiInput, SubmittalInput
+
+### Community 333 - "navigation-menu.tsx"
+Cohesion: 0.20
+Nodes (10): @radix-ui/react-navigation-menu, NavigationMenu(), NavigationMenuContent(), NavigationMenuIndicator(), NavigationMenuItem(), NavigationMenuLink(), NavigationMenuList(), NavigationMenuTrigger() (+2 more)
+
+### Community 334 - "daily-report-view.tsx"
+Cohesion: 0.22
+Nodes (8): Textarea(), DailyReportApi, DailyReportsListResponse, DailyReportView(), EquipmentRow, ManpowerRow, todayIso(), WorkDoneRow
+
+### Community 335 - "Recipe 1: Adding a New Takeoff Calculator"
+Cohesion: 0.25
+Nodes (7): Recipe 1: Adding a New Takeoff Calculator, Recipe 2: Adding a New API Endpoint with Optimistic Concurrency, Recipe 3: Synchronizing Graphify Knowledge Graph, Step 1: Write Domain Calculation Function, Step 2: Add Hand-Computed Golden Test, Step 3: Verify Domain Isolation, TechOffice Development Workflow & Recipe Book
+
+### Community 336 - "auth-options.ts"
+Cohesion: 0.38
+Nodes (5): bcryptjs, next-auth, handler, authOptions, SESSION_MAX_AGE_SECONDS
+
+### Community 337 - "daily-reports/[id]/route.ts"
+Cohesion: 0.29
+Nodes (6): DailyReportDeleteSchema, DailyReportUpdateSchema, EquipmentInputSchema, ManpowerInputSchema, RouteContext, WorkDoneInputSchema
+
+### Community 339 - "tabs.tsx"
+Cohesion: 0.33
+Nodes (5): @radix-ui/react-tabs, Tabs(), TabsContent(), TabsList(), TabsTrigger()
+
+### Community 340 - "avatar.tsx"
+Cohesion: 0.40
+Nodes (4): @radix-ui/react-avatar, Avatar(), AvatarFallback(), AvatarImage()
+
+### Community 341 - "use-mobile.ts"
+Cohesion: 0.70
+Nodes (4): getServerSnapshot(), getSnapshot(), subscribe(), useIsMobile()
+
+### Community 342 - "4.1 Repository Pattern & Dependency Injection"
+Cohesion: 0.50
+Nodes (4): 4.1 Repository Pattern & Dependency Injection, 4.2 Optimistic Concurrency Control (OCC), 4.3 Audit Logging & Soft Deletes, 4. Key Architectural Patterns
+
 ## Knowledge Gaps
-- **3377 isolated node(s):** `build.sh script`, `NEXT_TELEMETRY_DISABLED`, `database-runtime-build.sh script`, `$schema`, `style` (+3372 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 3747 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **3400 isolated node(s):** `build.sh script`, `NEXT_TELEMETRY_DISABLED`, `database-runtime-build.sh script`, `$schema`, `style` (+3395 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 3774 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **140 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `cn()` connect `cn` to `dxf-viewer-view.tsx`, `package.json`, `export-view.tsx`, `use-toast.ts`, `form.tsx`, `react`, `carousel.tsx`, `boq-editor-view.tsx`, `project-dashboard-view.tsx`, `dropdown-menu.tsx`?**
+- **Why does `cn()` connect `cn` to `react`, `correspondence-view.tsx`, `package.json`, `use-toast.ts`, `form.tsx`, `button.tsx`, `carousel.tsx`, `chart.tsx`, `alert-dialog.tsx`, `menubar.tsx`, `context-menu.tsx`, `toggle-group.tsx`, `drawer.tsx`, `navigation-menu.tsx`, `daily-report-view.tsx`, `popover.tsx`, `tabs.tsx`, `avatar.tsx`, `dxf-viewer-view.tsx`, `utils.ts`, `dropdown-menu.tsx`?**
   _High betweenness centrality (0.029) - this node is a cross-community bridge._
-- **Why does `zod` connect `zod` to `requireUserId`, `doccontrol/entities.ts`, `package.json`, `json`, `cpm.ts`, `services.ts`, `commit/route.ts`, `badRequest`, `calculations/route.ts`, `library/route.ts`, `projects/route.ts`, `pdf/route.ts`, `dxf.ts`, `vitest`, `answer/route.ts`, `scheduling/entities.ts`, `planned-value.ts`, `estimating/rate-analysis.ts`, `decimal.js`?**
+- **Why does `zod` connect `zod` to `requireUserId`, `doccontrol/entities.ts`, `package.json`, `cpm.ts`, `services.ts`, `commit/route.ts`, `payments/[id]/route.ts`, `calculations/route.ts`, `library/route.ts`, `projects/route.ts`, `pdf/route.ts`, `dxf.ts`, `daily-reports/[id]/route.ts`, `vitest`, `scheduling/entities.ts`, `project-dashboard/route.ts`, `domain/payments/cost-loading.ts`, `estimating/rate-analysis.ts`, `decimal.js`?**
   _High betweenness centrality (0.022) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `dependencies` to `package.json`?**
   _High betweenness centrality (0.015) - this node is a cross-community bridge._
-- **Are the 4 inferred relationships involving `requireUserId()` (e.g. with `Authentication & Authorization` and `5. Authentication Enforcement (BR-WEB-5) ✅`) actually correct?**
-  _`requireUserId()` has 4 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 2 inferred relationships involving `getServices()` (e.g. with `4.1 Repository Pattern & Dependency Injection` and `worklog.md`) actually correct?**
-  _`getServices()` has 2 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 6 inferred relationships involving `requireUserId()` (e.g. with `5. Adding New Features: Step-by-Step` and `Authentication & Authorization`) actually correct?**
+  _`requireUserId()` has 6 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 3 inferred relationships involving `getServices()` (e.g. with `4. Architectural Map & Key Interfaces` and `4.1 Repository Pattern & Dependency Injection`) actually correct?**
+  _`getServices()` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `build.sh script`, `NEXT_TELEMETRY_DISABLED`, `database-runtime-build.sh script` to the rest of the system?**
-  _3377 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _3400 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `cn` be split into smaller, more focused modules?**
-  _Cohesion score 0.01927039821776664 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.04998148833765272 - nodes in this community are weakly interconnected._

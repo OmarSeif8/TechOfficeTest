@@ -63,9 +63,9 @@ export class PrismaItemLibraryRepository implements IItemLibraryRepository {
             ? [
                 {
                   OR: [
-                    { descriptionEn: { contains: options.search, mode: "insensitive" } },
-                    { descriptionAr: { contains: options.search, mode: "insensitive" } },
-                    { code: { contains: options.search, mode: "insensitive" } },
+                    { descriptionEn: { contains: options.search, mode: "insensitive" as const } },
+                    { descriptionAr: { contains: options.search, mode: "insensitive" as const } },
+                    { code: { contains: options.search, mode: "insensitive" as const } },
                   ],
                 },
               ]
@@ -97,9 +97,9 @@ export class PrismaItemLibraryRepository implements IItemLibraryRepository {
             ? [
                 {
                   OR: [
-                    { descriptionEn: { contains: options.search, mode: "insensitive" } },
-                    { descriptionAr: { contains: options.search, mode: "insensitive" } },
-                    { code: { contains: options.search, mode: "insensitive" } },
+                    { descriptionEn: { contains: options.search, mode: "insensitive" as const } },
+                    { descriptionAr: { contains: options.search, mode: "insensitive" as const } },
+                    { code: { contains: options.search, mode: "insensitive" as const } },
                   ],
                 },
               ]
