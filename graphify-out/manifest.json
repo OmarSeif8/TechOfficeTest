@@ -234,9 +234,9 @@
     "semantic_hash": ""
   },
   "src/app/api/file-uploads/route.ts": {
-    "mtime": 1787338383.0,
-    "seen": 1790025203.2976637,
-    "ast_hash": "484a6578925f37150276fe1843fae90c",
+    "mtime": 1790031468.9954815,
+    "seen": 1790031559.8077931,
+    "ast_hash": "2967394096dfcdaf5da6ceb65269f8b8",
     "semantic_hash": ""
   },
   "src/app/api/imports/[importBatchId]/commit/route.ts": {
@@ -1326,9 +1326,9 @@
     "semantic_hash": ""
   },
   "src/infrastructure/persistence/prisma/item-library-repository.ts": {
-    "mtime": 1790026197.6460834,
-    "seen": 1790026352.6935673,
-    "ast_hash": "c7c09b16ce0dcea79b522a72e4a87abe",
+    "mtime": 1790030850.7461176,
+    "seen": 1790031559.8080435,
+    "ast_hash": "4bd42dd8a7b28a39167a06882d5027d9",
     "semantic_hash": ""
   },
   "src/infrastructure/persistence/prisma/payments/daily-report-repository.ts": {
@@ -1392,9 +1392,9 @@
     "semantic_hash": ""
   },
   "src/infrastructure/registry.ts": {
-    "mtime": 1787338383.0,
-    "seen": 1790025203.2978375,
-    "ast_hash": "d9b2f92060c4d57a986ba14b4562cae9",
+    "mtime": 1790031441.6162088,
+    "seen": 1790031559.8080573,
+    "ast_hash": "bae0244e6e657ca275c955b9fd521ea8",
     "semantic_hash": ""
   },
   "src/lib/api-helpers.ts": {
@@ -1452,9 +1452,9 @@
     "semantic_hash": ""
   },
   "src/lib/services.ts": {
-    "mtime": 1787338383.0,
-    "seen": 1790025203.2978463,
-    "ast_hash": "bb931dc51feb1b83c484f9140c41a87b",
+    "mtime": 1790031458.4972608,
+    "seen": 1790031559.808071,
+    "ast_hash": "232d810d02171622972ecfb6840fae4d",
     "semantic_hash": ""
   },
   "src/lib/stores/boq-editor-store.ts": {
@@ -3723,6 +3723,60 @@
     "mtime": 1790030809.0092974,
     "seen": 1790030823.988727,
     "ast_hash": "bd9539c87233fe518c1d168f0900a027",
+    "semantic_hash": ""
+  },
+  "src/domain/auth/permissions.ts": {
+    "mtime": 1790031477.092194,
+    "seen": 1790031559.8079782,
+    "ast_hash": "b2318e5accfb6f73d8eac0d8d3beee4b",
+    "semantic_hash": ""
+  },
+  "src/domain/drawing/pdf-takeoff.ts": {
+    "mtime": 1790031517.696605,
+    "seen": 1790031559.8079994,
+    "ast_hash": "243a6527f4bbc283145e25f4a59bd3f4",
+    "semantic_hash": ""
+  },
+  "src/infrastructure/notifications/desktop-notification-provider.ts": {
+    "mtime": 1790031510.4545722,
+    "seen": 1790031559.8080325,
+    "ast_hash": "f29c533b6389ec82d14cd097d5ae73e6",
+    "semantic_hash": ""
+  },
+  "src/infrastructure/notifications/webhook-notification-provider.ts": {
+    "mtime": 1790031505.256619,
+    "seen": 1790031559.8080335,
+    "ast_hash": "a63f24aefd2283323fd0313bf82a2827",
+    "semantic_hash": ""
+  },
+  "src/infrastructure/storage/supabase-storage-provider.ts": {
+    "mtime": 1790031412.5852456,
+    "seen": 1790031559.8080583,
+    "ast_hash": "e6271e57cd46954c80c3d9982db47cfd",
+    "semantic_hash": ""
+  },
+  "src/services/notifications/types.ts": {
+    "mtime": 1790031498.976614,
+    "seen": 1790031559.8080842,
+    "ast_hash": "deb66a1d9df333e13476c2766214e012",
+    "semantic_hash": ""
+  },
+  "src/services/storage/types.ts": {
+    "mtime": 1790031397.3893533,
+    "seen": 1790031559.8080852,
+    "ast_hash": "372641a8647e961eeae64d3558f1e800",
+    "semantic_hash": ""
+  },
+  "tests/golden/gt-dxf-6-pdf-takeoff.test.ts": {
+    "mtime": 1790031523.8523304,
+    "seen": 1790031559.8081586,
+    "ast_hash": "015c1603dae85970e0e93ef1b33e1239",
+    "semantic_hash": ""
+  },
+  "tests/unit/permissions.test.ts": {
+    "mtime": 1790031485.505546,
+    "seen": 1790031559.8082242,
+    "ast_hash": "2c0221b26a7cfedf1c48c71101cfa29e",
     "semantic_hash": ""
   }
 }

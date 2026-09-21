@@ -65,18 +65,14 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const buffer = Buffer.from(arrayBuffer);
   const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
 
-  // ─── Persist blob to disk (./uploads/<sha256>) ──────────────────────────
-  // The `uploads/` directory is created lazily here so the project works
-  // out-of-the-box on a fresh clone. It is gitignored (see .gitignore).
-  const uploadsDir = path.resolve(process.cwd(), "uploads");
-  await fs.mkdir(uploadsDir, { recursive: true });
+  // ─── Persist blob via StorageProvider (Supabase or Local) ───────────
+  const storageFilename = sha256;
+  const { storage } = (await import("@/lib/services")).getServices();
+  const uploadResult = await storage.upload("uploads", storageFilename, buffer, {
+    contentType: file.type,
+  });
 
-  const storageFilename = sha256; // per WO-W-12a spec: blob path is ./uploads/<sha256>
-  const diskPath = path.join(uploadsDir, storageFilename);
-  await fs.writeFile(diskPath, buffer);
-
-  // Relative storagePath kept portable across environments — `uploads/<sha256>`
-  const storagePath = path.join("uploads", storageFilename);
+  const storagePath = uploadResult.path;
 
   // ─── Create FileUpload row ─────────────────────────────────────────────
   const fileUpload = await db.fileUpload.create({

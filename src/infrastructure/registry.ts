@@ -71,6 +71,9 @@ import { PrismaPaymentRepository } from "@/infrastructure/persistence/prisma/pay
 import { PrismaVariationRepository } from "@/infrastructure/persistence/prisma/payments/variation-repository";
 import { PrismaProgressRepository } from "@/infrastructure/persistence/prisma/payments/progress-repository";
 import { PrismaDailyReportRepository } from "@/infrastructure/persistence/prisma/payments/daily-report-repository";
+import type { IStorageProvider } from "@/services/storage/types";
+import { LocalStorageProvider } from "@/infrastructure/storage/local-storage-provider";
+import { SupabaseStorageProvider } from "@/infrastructure/storage/supabase-storage-provider";
 
 // ─── Registry (lazy singleton per server process) ────────────────────────
 
@@ -99,6 +102,7 @@ interface ServiceContainer {
   variations: IVariationRepository;
   progress: IProgressRepository;
   dailyReports: IDailyReportRepository;
+  storage: IStorageProvider;
 }
 
 let container: ServiceContainer | null = null;
@@ -143,10 +147,17 @@ export function getContainer(): ServiceContainer {
   const progress = new PrismaProgressRepository();
   const dailyReports = new PrismaDailyReportRepository();
 
+  const storageDriver = process.env.STORAGE_DRIVER ?? "supabase";
+  const storage: IStorageProvider =
+    storageDriver === "local"
+      ? new LocalStorageProvider()
+      : new SupabaseStorageProvider();
+
   container = {
     prisma: db,
     ai,
     auth,
+    storage,
     projects,
     boq,
     library,

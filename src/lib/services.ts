@@ -35,6 +35,7 @@ import type {
 } from "@domain/repositories";
 import type { IAiProvider } from "@/services/ai/types";
 import type { IAuthProvider } from "@/services/auth/types";
+import type { IStorageProvider } from "@/services/storage/types";
 import type { PrismaClient } from "@prisma/client";
 
 export interface Services {
@@ -60,6 +61,7 @@ export interface Services {
   readonly dailyReports: IDailyReportRepository;
   readonly ai: IAiProvider;
   readonly auth: IAuthProvider;
+  readonly storage: IStorageProvider;
   readonly prisma: PrismaClient;
 }
 
@@ -89,6 +91,7 @@ export function getServices(): Services {
     dailyReports: c.dailyReports,
     ai: c.ai,
     auth: c.auth,
+    storage: c.storage,
     prisma: c.prisma,
   };
 }
