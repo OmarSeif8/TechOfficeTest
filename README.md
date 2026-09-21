@@ -1,226 +1,224 @@
 # TechOffice — Engineering Technical Office
 
-A bilingual (EN/AR) project management web application for civil engineers, built with Next.js 16, TypeScript, Prisma, and the Linear design language.
+A bilingual (**English / Arabic**) enterprise management platform for civil engineers, quantity surveyors, and project managers. Built with **Next.js 16 (Turbopack)**, **TypeScript 5**, **Prisma ORM**, **Supabase PostgreSQL**, and the **Linear design language**.
 
-## What This Is
+---
 
-TechOffice is a technical office management tool that consolidates the day-to-day workflows of civil engineers into a single web application:
+## 📑 Table of Contents
+1. [Core Modules](#-core-modules)
+2. [Architecture & Design Philosophy](#-architecture--design-philosophy)
+3. [Technology Stack](#-technology-stack)
+4. [Quick Start & Setup](#-quick-start--setup)
+5. [Database & Seeding](#-database--seeding)
+6. [Testing & Quality Gates](#-testing--quality-gates)
+7. [Graphify Knowledge Graph](#-graphify-knowledge-graph)
+8. [Documentation Hub](#-documentation-hub)
+9. [Deployment](#-deployment)
+10. [License](#-license)
 
-- **Bill of Quantities (BoQ)** — Build BoQ documents with sections, items, rate analysis, and live totals
-- **Scheduling** — CPM engine with critical path, float, Gantt chart, WBS, calendar
-- **Document Control** — Drawing register, submittals log, RFIs, correspondence, transmittal builder
-- **Drawing Viewer** — DXF file parsing with SVG rendering, zoom/pan, measurement tools
+---
 
-## Tech Stack
+## 🏗 Core Modules
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 16 (App Router, Turbopack) |
-| Language | TypeScript 5 (strict) |
-| Styling | Tailwind CSS 4 + shadcn/ui (New York) |
-| Database | Prisma ORM + SQLite |
-| Auth | NextAuth.js v4 (credentials provider) |
-| State | TanStack Query (server) + Zustand (client) |
-| i18n | next-intl (EN/AR with RTL) |
-| AI | z-ai-web-dev-sdk (LLM, vision, TTS, ASR) |
-| Design | Linear design language (dark mode, lavender accent) |
+TechOffice consolidates the fragmented day-to-day tools of technical offices into an integrated, responsive web application:
 
-## Architecture
+* **Bill of Quantities (BoQ) Engine**:
+  * Hierarchical document tree (Project $\rightarrow$ Document $\rightarrow$ Section $\rightarrow$ Items).
+  * Arbitrary decimal precision calculations via `decimal.js` (no floating-point drift).
+  * Rate analysis build-ups split across Material, Labor, Equipment, Subcontractor, and Markups.
+  * 6 civil engineering takeoff calculators (Concrete, Formwork, Rebar Bar-Bending Schedules, Masonry, Plaster, Paint).
+  * Full Excel import/export wizard with automated column mapping.
+* **CPM Scheduling Engine**:
+  * Critical Path Method (CPM) with topological forward/backward passes.
+  * Calculates Early Start, Early Finish, Late Start, Late Finish, Total Float, and Free Float.
+  * Cyclic dependency rejection engine preventing project deadlocks.
+  * Standard relationship types: `FS`, `SS`, `FF`, `SF` with positive and negative lag.
+  * Interactive SVG Gantt chart with critical path highlighting and custom calendars.
+* **Document Control & Transmittals**:
+  * Drawing register with revision tracking and superseded status workflows.
+  * Submittal logs and RFIs with Q&A status life-cycle state machines.
+  * Dynamic overdue alerts linked to working-day calendars.
+  * Automated transmittal slip compiler.
+* **DXF CAD Vector Viewer**:
+  * In-browser CAD parsing directly from raw ASCII `.dxf` files.
+  * Vector rendering via interactive SVG with layer toggle, pan, zoom, and extents fit.
+  * Precision measurement tools: point-to-point distance, perimeter, and polygon area.
+* **Bilingual Support (EN / AR & RTL)**:
+  * Full Right-to-Left (RTL) support with localized number formatting and parallel string fields (`nameEn`, `nameAr`).
 
-The codebase follows a **5-layer platform-agnostic architecture**:
+---
+
+## 🏛 Architecture & Design Philosophy
+
+The application follows an **isomorphic 5-layer Hexagonal / Domain-Driven Design (DDD)**:
 
 ```
 src/
-├── domain/          Pure calculation logic (zero platform imports — isomorphic)
-│   ├── boq/         BoQ totals, rate analysis, calculators
-│   ├── scheduling/  CPM engine, calendar, cycle detection
-│   ├── doccontrol/  Numbering, overdue, status workflows, transmittal
-│   └── drawing/     DXF parser, transforms, measurement, layers
-├── shared/          Zod schemas + entity types + i18n strings
-├── services/        Interfaces (IAiProvider, IAuthProvider) + implementations
-├── infrastructure/  Prisma repository implementations + DI registry
-└── app/             Next.js App Router (API routes + pages)
+├── domain/          Pure calculation engines (zero platform dependencies)
+│   ├── boq/         BoQ totals, rate analysis, civil takeoff calculators
+│   ├── scheduling/  CPM engine, calendars, cycle detection
+│   ├── doccontrol/  Numbering generators, overdue tracking, workflows
+│   └── drawing/     DXF parser, transformations, measurement algorithms
+├── shared/          Entity types, Zod schemas, bilingual i18n dictionaries
+├── services/        Provider abstractions (IAiProvider, IAuthProvider)
+├── infrastructure/  Prisma repository adapters & Dependency Injection registry
+└── app/             Next.js 16 App Router (REST API routes & React 19 views)
 ```
 
-**Layer purity is mechanically enforced** by eslint `no-restricted-imports` rules + an isomorphic compile test (`bun run test:domain`). The domain layer compiles without Next.js, React, Prisma, or Node.js — making it portable to Electron, Tauri, or React Native.
+> **The Law of Layers**: The core `domain` layer has **zero external platform imports** (no Next.js, React, Node.js, or Prisma). Layer purity is enforced via ESLint rules and the isolated `npm run test:domain` compilation check.
 
-## Quick Start
+For deep architectural details, see [**`docs/ARCHITECTURE.md`**](file:///d:/Prog/Prog%20file/techoffice-main/docs/ARCHITECTURE.md).
 
+---
+
+## 💻 Technology Stack
+
+| Layer | Technology |
+| :--- | :--- |
+| **Framework** | Next.js 16 (App Router, Turbopack) |
+| **Language** | TypeScript 5 (Strict Mode) |
+| **UI & Styling** | Tailwind CSS 4, Radix UI Primitives, shadcn/ui (Linear Dark Theme) |
+| **Database** | Supabase PostgreSQL + Prisma ORM (Connection Pooler on Port 6543) |
+| **Authentication**| NextAuth.js v4 (Credentials Provider with Session Verification) |
+| **Client State** | Zustand (UI Store) + TanStack React Query (Server Cache) |
+| **i18n** | `next-intl` (English & Arabic with full RTL styling) |
+| **Math & CAD** | `decimal.js` for financial accuracy, `dxf` parser |
+| **Testing** | Vitest 4 with V8 coverage |
+
+---
+
+## 🚀 Quick Start & Setup
+
+### 1. Prerequisites
+* **Node.js** 20.x or higher (or **Bun** 1.1+)
+* **Git** installed
+* A **Supabase PostgreSQL** database instance
+
+### 2. Clone and Install
 ```bash
-# Install dependencies
-bun install
+git clone https://github.com/OmarSeif8/TechOfficeTest.git
+cd TechOfficeTest
 
-# Set up the database
-bun run db:push
-bun run db:seed
-
-# Start the dev server
-bun run dev
-# → http://localhost:3000
-
-# Run quality gates
-bun run lint
-bun run typecheck
-bun run test
+npm install
+# or: bun install
 ```
 
-### Environment Variables
+### 3. Configure Environment Variables
+Copy `.env.example` to `.env` and fill in your connection credentials:
+```bash
+cp .env.example .env
+```
 
-Create a `.env` file:
-
+Key variables:
 ```env
-DATABASE_URL=file:./db/custom.db
-NEXTAUTH_SECRET=<openssl rand -base64 32>
-NEXTAUTH_URL=http://localhost:3000
-DEMO_MODE=true   # Set to false to require real authentication
+NEXT_PUBLIC_SUPABASE_URL="https://[YOUR-PROJECT].supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
+DATABASE_URL="postgresql://postgres.[REF]:[PASS]@aws-1-[REGION].pooler.supabase.com:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://postgres.[REF]:[PASS]@aws-1-[REGION].pooler.supabase.com:5432/postgres"
+NEXTAUTH_SECRET="your-32-char-random-secret"
+NEXTAUTH_URL="http://localhost:3000"
+DEMO_MODE="true"
 ```
 
-## Modules
+### 4. Initialize Database
+Push the Prisma schema and seed standard reference data:
+```bash
+npx prisma db push
+npx tsx prisma/seed.ts
+```
 
-### Phase 1 — BoQ Module ✅
+### 5. Start Development Server
+```bash
+npm run dev
+# or: bun run dev
+```
+Open [**`http://localhost:3000`**](http://localhost:3000) in your browser.
 
-| Screen | View | Description |
-|--------|------|-------------|
-| S1 | App Shell | Sidebar + topbar + footer (Linear dark theme) |
-| S2 | Dashboard | Project list with live totals |
-| S3/S4 | BoQ Editor | Document tree, inline editing, live totals |
-| S5 | Rate Analysis | Build-up rates (BR-8..10) |
-| S6 | Calculators | 6 takeoff calculators (concrete, formwork, rebar, masonry, plaster, paint) |
-| S7 | Library | 23 seeded items with bilingual EN/AR search |
-| S8 | Import | 4-step Excel import wizard |
-| S9 | Export | Excel + PDF export (EN/AR/RTL) |
-| S10 | Settings | User + company profile |
+---
 
-**Golden tests**: GT-1..GT-8 (61 assertions)
+## 🗄 Database & Seeding
 
-### Phase 2 — Scheduling Module ✅
+* **Prisma Schema**: Declared in [`prisma/schema.prisma`](file:///d:/Prog/Prog%20file/techoffice-main/prisma/schema.prisma) with optimistic concurrency locks (`version`), soft deletes (`deletedAt`), and audit logs (`AuditLog`).
+* **Idempotent Seeding**: Run `npx tsx prisma/seed.ts` to initialize:
+  * 9 standard engineering measurement units (`m`, `m2`, `m3`, `ton`, `kg`, etc.)
+  * 38 unit aliases for fuzzy matching
+  * 13 rebar diameters & 8 shape codes
+  * 10 library categories and 23 standard construction items.
 
-| Screen | View | Description |
-|--------|------|-------------|
-| S11 | Scheduling | Run CPM engine, view critical path |
-| S12 | WBS | Work breakdown structure tree |
-| S13 | Activities | Activity list with relationships (FS/SS/FF/SF) |
-| S14 | Calendar | Weekday mask + exception editor |
-| S15 | Gantt | SVG Gantt chart with critical path highlighting |
+For full database documentation, see [**`docs/DATABASE.md`**](file:///d:/Prog/Prog%20file/techoffice-main/docs/DATABASE.md).
 
-**Golden tests**: GT-P1..GT-P6 (51 assertions)
+---
 
-### Phase 3 — Document Control + Drawing Viewer ✅
+## 🧪 Testing & Quality Gates
 
-| Screen | View | Description |
-|--------|------|-------------|
-| S17 | Drawings | Drawing register with revision history |
-| S18 | Submittals | Submittal log with status workflow + overdue tracking |
-| S19 | RFIs | RFI log with Q&A + answer flow |
-| S20 | Correspondence | Correspondence + transmittal builder |
-| S21 | Documents Dashboard | Widget cards (overdue counts, open items) |
-| S22 | DXF Viewer | SVG rendering with zoom/pan, layers, measurement |
-
-**Golden tests**: GT-DC1..GT-DC6 (37 assertions) + GT-DXF-1..GT-DXF-5 (59 assertions)
-
-## Testing
+The codebase enforces strict test verification:
 
 ```bash
-# Run all tests (excluding performance tests)
-bun run test
+# Run all unit and integration tests
+npm test
 
-# Run only golden tests (the law)
-bun run test:golden
+# Run Golden Tests (The Law — hand-verified engineering benchmarks)
+npm run test:golden
 
-# Run performance test (5,000-item BoQ)
-PERF_TEST=true bun run test tests/perf/boq-5k.test.ts
+# Verify domain layer isolation (zero platform dependencies)
+npm run test:domain
 
-# Verify domain layer purity (isomorphic compile)
-bun run test:domain
+# Typecheck and linting
+npm run typecheck
+npm run lint
 ```
 
-### Test Statistics
+### Golden Test Law
+Golden tests ([`tests/golden/`](file:///d:/Prog/Prog%20file/techoffice-main/tests/golden)) represent immutable mathematical benchmarks for:
+* BoQ hierarchical totals accumulation
+* CPM Early/Late date and float calculation
+* Civil takeoff formula outputs
+* DXF coordinate transforms and shoelace polygon area calculations.
 
-| Category | Count |
-|----------|-------|
-| Golden tests | 208 assertions (GT-1..8, GT-P1..6, GT-DC1..6, GT-DXF-1..5) |
-| Unit tests | ~80 (AI provider, auth, registry, calendar, engine edge cases) |
-| Integration tests | ~80 (repositories: project, BoQ, library, calculation, rate analysis, scheduling, doc control) |
-| Performance tests | 4 (5k-item BoQ: compute < 300ms — actual: 20ms) |
-| E2E concurrency | 5 (optimistic concurrency: concurrent edits → 1 succeeds) |
-| **Total** | **460 tests** |
+---
 
-## Design Language
+## 🧠 Graphify Knowledge Graph
 
-The app uses **Linear's design language** (per `DESIGN.md`):
+This repository is indexed with a **Graphify Knowledge Graph** at [`graphify-out/`](file:///d:/Prog/Prog%20file/techoffice-main/graphify-out), containing 6,100+ code nodes and 10,800+ relationship edges:
 
-- **Dark canvas**: `#010102` (near-black)
-- **Surface**: `#0f1011` (charcoal panels)
-- **Primary accent**: `#5e6ad2` (lavender — brand mark, CTAs, focus rings only)
-- **Hairline borders**: `#23252a`
-- **Typography**: Inter (body) + JetBrains Mono (code/numbers)
-- **No decorative color usage** — the accent appears only on brand mark, primary CTAs, and focus rings
+* **Interactive Visualization**: Open [`graphify-out/graph.html`](file:///d:/Prog/Prog%20file/techoffice-main/graphify-out/graph.html) in any browser to inspect the visual dependency graph.
+* **Architecture Audit**: Review [`graphify-out/GRAPH_REPORT.md`](file:///d:/Prog/Prog%20file/techoffice-main/graphify-out/GRAPH_REPORT.md) for community hubs, bridge nodes, and surprising connections.
+* **Query the Graph (CLI)**:
+  ```powershell
+  # Query architecture or call flow
+  graphify query "How does CPM scheduling connect to BoQ?"
 
-## Project Structure
+  # Trace shortest path between two symbols
+  graphify path "requireUserId" "PrismaProjectRepository"
 
-```
-TechOffice/
-├── src/
-│   ├── app/                    Next.js App Router (API routes + page)
-│   │   ├── api/                55 API route files
-│   │   ├── layout.tsx         Root layout (providers, fonts, i18n)
-│   │   └── page.tsx           Single / route (SPA view switching)
-│   ├── components/             React components
-│   │   ├── ui/                 shadcn/ui (50+ components)
-│   │   ├── views/              20 view components (SPA views)
-│   │   ├── app-shell.tsx       Layout shell (sidebar + topbar + footer)
-│   │   └── view-router.tsx    Client-side view switcher
-│   ├── domain/                 Pure domain logic (isomorphic)
-│   ├── shared/                 Zod schemas + entity types + i18n
-│   ├── services/               Service interfaces + impls (AI, auth)
-│   ├── infrastructure/         Prisma repositories + DI registry
-│   └── lib/                    Helpers (db, auth, api-helpers, queries)
-├── prisma/
-│   ├── schema.prisma           ~60 models (Phase 1-3 + reserved Phase 4-5)
-│   └── seed.ts                 Seed data (units, rebar, shape codes, library)
-├── tests/
-│   ├── golden/                 14 golden test files (the law)
-│   ├── unit/                   6 unit test files
-│   ├── integration/            6 integration test files
-│   ├── perf/                   1 performance test (5k items)
-│   └── e2e/                    1 concurrency test
-├── docs/
-│   ├── planning/               7 planning documents
-│   ├── decisions/              1 exit validation doc
-│   ├── imported/               Imported GLM conversation (4 files)
-│   └── design-systems/         74 DESIGN.md references
-├── DESIGN.md                   Linear design system
-├── MODIFICATION_LOG.md         Log of code modifications
-├── worklog.md                  Full development worklog (29 task records)
-└── ecosystem.config.cjs        PM2 process manager config
-```
+  # Update graph after refactors
+  graphify update .
+  ```
 
-## Key Principles
+---
 
-1. **Golden tests are law** — hand-computed values that the code must reproduce exactly. If the code disagrees with a golden test, the code is wrong.
-2. **Pure domain core** — `src/domain/` has zero platform imports. Same code runs in tests, Next.js server, and (future) Electron/Tauri.
-3. **AI proposes, engineer approves** — the `IAiProvider` interface returns proposals (never applies effects).
-4. **Bilingual EN/AR with RTL** — 146 i18n keys × 2 locales, full RTL support.
-5. **Linear design language** — dark mode native, single lavender accent, hairline borders, no decorative color.
+## 📚 Documentation Hub
 
-## Process Management
+Deep-dive documentation is available in the [`docs/`](file:///d:/Prog/Prog%20file/techoffice-main/docs) directory:
 
-The dev server runs via **PM2** for stability:
+* [**Architecture Guide**](file:///d:/Prog/Prog%20file/techoffice-main/docs/ARCHITECTURE.md) — 5-layer domain architecture, repository patterns, optimistic concurrency, and audit logs.
+* [**Database Guide**](file:///d:/Prog/Prog%20file/techoffice-main/docs/DATABASE.md) — Schema models, Supabase connection pooler setup, seed runbooks, and case-insensitivity rules.
+* [**API Reference**](file:///d:/Prog/Prog%20file/techoffice-main/docs/API_REFERENCE.md) — RESTful endpoints, ownership security, payload schemas, and error responses.
+* [**Deployment Guide**](file:///d:/Prog/Prog%20file/techoffice-main/docs/DEPLOYMENT.md) — Vercel preview branch deployment, environment variables, and build optimization.
+* [**Design System Specification**](file:///d:/Prog/Prog%20file/techoffice-main/DESIGN.md) — Linear dark-mode tokens, spacing scales, and typography standards.
 
-```bash
-# Start
-pm2 start ecosystem.config.cjs
+---
 
-# Restart after code changes
-pm2 restart techoffice
+## ☁️ Deployment
 
-# View logs
-pm2 logs techoffice
+TechOffice is deployed to **Vercel** with automatic preview deployments:
+* Pushes to `main` $\rightarrow$ Production deployment.
+* Pushes to any branch (e.g. `debug/investigation`) $\rightarrow$ Instant isolated Preview deployment with live URL.
 
-# Stop
-pm2 stop techoffice
-```
+For configuration instructions, see [**`docs/DEPLOYMENT.md`**](file:///d:/Prog/Prog%20file/techoffice-main/docs/DEPLOYMENT.md).
 
-## License
+---
 
-Proprietary — all rights reserved.
+## 📄 License
+
+Proprietary — All rights reserved.

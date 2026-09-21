@@ -2208,9 +2208,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1787338383.0,
-    "seen": 1790025203.2979615,
-    "ast_hash": "f5a7303a6e61201c6b7a689f1e91208f",
+    "mtime": 1790030648.2842422,
+    "seen": 1790030664.3226151,
+    "ast_hash": "ab71e9b7119d45451ead41612e53d096",
     "semantic_hash": ""
   },
   "docs/decisions/0001-phase-1-exit.md": {
@@ -3675,6 +3675,30 @@
     "mtime": 1787338383.0,
     "seen": 1790025203.298183,
     "ast_hash": "d4ec17031315c1e7f9d547a6bf30d8eb",
+    "semantic_hash": ""
+  },
+  "docs/API_REFERENCE.md": {
+    "mtime": 1790030617.1405952,
+    "seen": 1790030664.3226168,
+    "ast_hash": "6b62799e5f7f1766bc535433eb4b2925",
+    "semantic_hash": ""
+  },
+  "docs/ARCHITECTURE.md": {
+    "mtime": 1790030601.1898878,
+    "seen": 1790030664.322618,
+    "ast_hash": "f39b73d5082d156ffee67431b25b0ed0",
+    "semantic_hash": ""
+  },
+  "docs/DATABASE.md": {
+    "mtime": 1790030609.2619717,
+    "seen": 1790030664.3226194,
+    "ast_hash": "bf1786afd4e4615d760c17bd29dae357",
+    "semantic_hash": ""
+  },
+  "docs/DEPLOYMENT.md": {
+    "mtime": 1790030634.297904,
+    "seen": 1790030664.3226204,
+    "ast_hash": "c0f3ec29b8e602128147e0c24dc26469",
     "semantic_hash": ""
   }
 }
